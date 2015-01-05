@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hybridgroup/gobot"
+	"github.com/hybridgroup/gobot/platforms/firmata/client"
 	"github.com/hybridgroup/gobot/platforms/gpio"
 	"github.com/hybridgroup/gobot/platforms/i2c"
 	"github.com/tarm/goserial"
@@ -26,8 +27,8 @@ var _ i2c.I2c = (*FirmataAdaptor)(nil)
 type FirmataAdaptor struct {
 	name       string
 	port       string
-	board      *board
-	i2cAddress byte
+	board      *client.Client
+	i2cAddress int
 	conn       io.ReadWriteCloser
 	connect    func(string) (io.ReadWriteCloser, error)
 }
@@ -72,8 +73,10 @@ func (f *FirmataAdaptor) Connect() (errs []error) {
 			f.conn = sp
 		}
 	}
-	f.board = newBoard(f.conn)
-	f.board.connect()
+	f.board = client.New(f.conn)
+	if err := f.board.Connect(); err != nil {
+		return []error{err}
+	}
 	return
 }
 
@@ -81,7 +84,7 @@ func (f *FirmataAdaptor) Connect() (errs []error) {
 // Prints error message on error
 func (f *FirmataAdaptor) Disconnect() (err error) {
 	if f.board != nil {
-		return f.board.serial.Close()
+		return f.board.Disconnect()
 	}
 	return errors.New("no board connected")
 }
@@ -104,11 +107,11 @@ func (f *FirmataAdaptor) ServoWrite(pin string, angle byte) (err error) {
 		return err
 	}
 
-	err = f.board.setPinMode(byte(p), servo)
+	err = f.board.SetPinMode(p, client.Servo)
 	if err != nil {
 		return err
 	}
-	err = f.board.analogWrite(byte(p), angle)
+	err = f.board.AnalogWrite(p, int(angle))
 	return
 }
 
@@ -119,11 +122,11 @@ func (f *FirmataAdaptor) PwmWrite(pin string, level byte) (err error) {
 		return err
 	}
 
-	err = f.board.setPinMode(byte(p), pwm)
+	err = f.board.SetPinMode(p, client.Pwm)
 	if err != nil {
 		return err
 	}
-	err = f.board.analogWrite(byte(p), level)
+	err = f.board.AnalogWrite(p, int(level))
 	return
 }
 
@@ -134,12 +137,12 @@ func (f *FirmataAdaptor) DigitalWrite(pin string, level byte) (err error) {
 		return
 	}
 
-	err = f.board.setPinMode(byte(p), output)
+	err = f.board.SetPinMode(p, client.Output)
 	if err != nil {
 		return
 	}
 
-	err = f.board.digitalWrite(byte(p), level)
+	err = f.board.DigitalWrite(p, int(level))
 	return
 }
 
@@ -152,17 +155,14 @@ func (f *FirmataAdaptor) DigitalRead(pin string) (val int, err error) {
 	if err != nil {
 		return
 	}
-	if err = f.board.setPinMode(byte(p), input); err != nil {
+	if err = f.board.SetPinMode(p, client.Input); err != nil {
 		return
 	}
-	if err = f.board.togglePinReporting(byte(p), high, reportDigital); err != nil {
-		return
-	}
-	if err = f.board.readAndProcess(); err != nil {
+	if err = f.board.TogglePinReporting(p, client.High, client.ReportDigital); err != nil {
 		return
 	}
 
-	gobot.Once(f.board.events[fmt.Sprintf("digital_read_%v", pin)], func(data interface{}) {
+	gobot.Once(f.board.Event(fmt.Sprintf("DigitalRead%v", pin)), func(data interface{}) {
 		ret <- int(data.([]byte)[0])
 	})
 
@@ -184,19 +184,15 @@ func (f *FirmataAdaptor) AnalogRead(pin string) (val int, err error) {
 		return
 	}
 	p = f.digitalPin(p)
-	if err = f.board.setPinMode(byte(p), analog); err != nil {
+	if err = f.board.SetPinMode(p, client.Analog); err != nil {
 		return
 	}
 
-	if err = f.board.togglePinReporting(byte(p), high, reportAnalog); err != nil {
+	if err = f.board.TogglePinReporting(p, client.High, client.ReportAnalog); err != nil {
 		return
 	}
 
-	if err = f.board.readAndProcess(); err != nil {
-		return
-	}
-
-	gobot.Once(f.board.events[fmt.Sprintf("analog_read_%v", pin)], func(data interface{}) {
+	gobot.Once(f.board.Event(fmt.Sprintf("AnalogRead%v", pin)), func(data interface{}) {
 		b := data.([]byte)
 		ret <- int(uint(b[0])<<24 | uint(b[1])<<16 | uint(b[2])<<8 | uint(b[3]))
 	})
@@ -216,23 +212,19 @@ func (f *FirmataAdaptor) digitalPin(pin int) int {
 
 // I2cStart initializes board with i2c configuration
 func (f *FirmataAdaptor) I2cStart(address byte) (err error) {
-	f.i2cAddress = address
-	return f.board.i2cConfig([]byte{0})
+	f.i2cAddress = int(address)
+	return f.board.I2cConfig([]byte{0})
 }
 
 // I2cRead reads from I2c specified size
 // Returns empty byte array if response is timed out
 func (f *FirmataAdaptor) I2cRead(size uint) (data []byte, err error) {
 	ret := make(chan []byte)
-	if err = f.board.i2cReadRequest(f.i2cAddress, size); err != nil {
+	if err = f.board.I2cReadRequest(f.i2cAddress, int(size)); err != nil {
 		return
 	}
 
-	if err = f.board.readAndProcess(); err != nil {
-		return
-	}
-
-	gobot.Once(f.board.events["i2c_reply"], func(data interface{}) {
+	gobot.Once(f.board.Event("I2cReply"), func(data interface{}) {
 		ret <- data.(map[string][]byte)["data"]
 	})
 
@@ -246,5 +238,5 @@ func (f *FirmataAdaptor) I2cRead(size uint) (data []byte, err error) {
 
 // I2cWrite retrieves i2c data
 func (f *FirmataAdaptor) I2cWrite(data []byte) (err error) {
-	return f.board.i2cWriteRequest(f.i2cAddress, data)
+	return f.board.I2cWriteRequest(f.i2cAddress, data)
 }

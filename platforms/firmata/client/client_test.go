@@ -1,4 +1,4 @@
-package firmata
+package client
 
 import (
 	"testing"
