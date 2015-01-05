@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/hybridgroup/gobot"
@@ -62,7 +61,6 @@ type Client struct {
 	FirmwareName     string
 	ProtocolVersion  string
 	interval         time.Duration
-	mutex            *sync.Mutex
 	disconnect       chan bool
 	connected        bool
 	connection       io.ReadWriteCloser
@@ -71,11 +69,23 @@ type Client struct {
 	gobot.Eventer
 }
 
+type PinState struct {
+	Pin   int
+	Mode  int
+	Value int
+}
+
 type Pin struct {
 	SupportedModes []int
 	Mode           int
 	Value          int
 	AnalogChannel  int
+}
+
+type I2cReply struct {
+	Address  int
+	Register int
+	Data     []byte
 }
 
 // newBoard creates a new Client connected in specified serial port.
@@ -89,7 +99,6 @@ func New(conn io.ReadWriteCloser) *Client {
 		Pins:            []Pin{},
 		Eventer:         gobot.NewEventer(),
 		interval:        5 * time.Millisecond,
-		mutex:           &sync.Mutex{},
 		disconnect:      make(chan bool),
 		connection:      conn,
 		analogPins:      []int{},
@@ -149,13 +158,13 @@ func (b *Client) Connect() (err error) {
 			if err := initFunc(); err != nil {
 				return err
 			}
-			if err := b.Process(); err != nil {
+			if err := b.process(); err != nil {
 				return err
 			}
 			if b.connected {
 				go func() {
 					for {
-						if err := b.Process(); err != nil {
+						if err := b.process(); err != nil {
 							gobot.Publish(b.Event("Error"), err)
 						}
 					}
@@ -284,16 +293,7 @@ func (b *Client) read(length int) (buf []byte, err error) {
 	return
 }
 
-// process uses incoming data and executes actions depending on what is received.
-// The following messages are processed: reportVersion, AnalogMessageRangeStart,
-// digitalMessageRangeStart.
-// And the following responses: capability, analog mapping, pin state,
-// i2c, firmwareQuery, string data.
-// If neither of those messages is received, then data is treated as "bad_byte"
-func (b *Client) Process() (err error) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
+func (b *Client) process() (err error) {
 	buf, err := b.read(3)
 	if err != nil {
 		return err
@@ -311,14 +311,7 @@ func (b *Client) Process() (err error) {
 		pin := (messageType & 0x0F)
 
 		b.Pins[b.analogPins[pin]].Value = int(value)
-		gobot.Publish(b.Event(fmt.Sprintf("AnalogRead%v", pin)),
-			[]byte{
-				byte(value >> 24),
-				byte(value >> 16),
-				byte(value >> 8),
-				byte(value & 0xff),
-			},
-		)
+		gobot.Publish(b.Event(fmt.Sprintf("AnalogRead%v", pin)), b.Pins[b.analogPins[pin]].Value)
 	case DigitalMessageRangeStart <= messageType &&
 		DigitalMessageRangeEnd >= messageType:
 
@@ -330,8 +323,7 @@ func (b *Client) Process() (err error) {
 			pin := b.Pins[pinNumber]
 			if byte(pin.Mode) == Input {
 				pin.Value = int((portValue >> (byte(i) & 0x07)) & 0x01)
-				gobot.Publish(b.Event(fmt.Sprintf("DigitalRead%v", pinNumber)),
-					[]byte{byte(pin.Value & 0xff)})
+				gobot.Publish(b.Event(fmt.Sprintf("DigitalRead%v", pinNumber)), pin.Value)
 			}
 		}
 	case StartSysex == messageType:
@@ -363,7 +355,7 @@ func (b *Client) Process() (err error) {
 					}
 					b.Pins = append(b.Pins, Pin{modes, Output, 0, 0})
 					b.AddEvent(fmt.Sprintf("DigitalRead%v", len(b.Pins)-1))
-					b.AddEvent(fmt.Sprintf("Pin%vState", len(b.Pins)-1))
+					b.AddEvent(fmt.Sprintf("PinState%v", len(b.Pins)-1))
 					supportedModes = 0
 					n = 0
 					continue
@@ -402,18 +394,18 @@ func (b *Client) Process() (err error) {
 				pin.Value = int(uint(pin.Value) | uint(currentBuffer[6])<<14)
 			}
 
-			gobot.Publish(b.Event(fmt.Sprintf("Pin%vState", currentBuffer[2])),
-				map[string]int{
-					"pin":   int(currentBuffer[2]),
-					"mode":  int(pin.Mode),
-					"value": int(pin.Value),
+			gobot.Publish(b.Event(fmt.Sprintf("PinState%v", currentBuffer[2])),
+				PinState{
+					Pin:   int(currentBuffer[2]),
+					Mode:  int(pin.Mode),
+					Value: int(pin.Value),
 				},
 			)
 		case I2CReply:
-			i2cReply := map[string][]byte{
-				"slave_address": []byte{byte(currentBuffer[2]) | byte(currentBuffer[3])<<7},
-				"register":      []byte{byte(currentBuffer[4]) | byte(currentBuffer[5])<<7},
-				"data":          []byte{byte(currentBuffer[6]) | byte(currentBuffer[7])<<7},
+			reply := I2cReply{
+				Address:  int(byte(currentBuffer[2]) | byte(currentBuffer[3])<<7),
+				Register: int(byte(currentBuffer[4]) | byte(currentBuffer[5])<<7),
+				Data:     []byte{byte(currentBuffer[6]) | byte(currentBuffer[7])<<7},
 			}
 			for i := 8; i < len(currentBuffer); i = i + 2 {
 				if currentBuffer[i] == byte(0xF7) {
@@ -422,11 +414,11 @@ func (b *Client) Process() (err error) {
 				if i+2 > len(currentBuffer) {
 					break
 				}
-				i2cReply["data"] = append(i2cReply["data"],
+				reply.Data = append(reply.Data,
 					byte(currentBuffer[i])|byte(currentBuffer[i+1])<<7,
 				)
 			}
-			gobot.Publish(b.Event("I2cReply"), i2cReply)
+			gobot.Publish(b.Event("I2cReply"), reply)
 		case FirmwareQuery:
 			name := []byte{}
 			for _, val := range currentBuffer[4:(len(currentBuffer) - 1)] {
@@ -438,8 +430,7 @@ func (b *Client) Process() (err error) {
 			gobot.Publish(b.Event("FirmwareQuery"), b.FirmwareName)
 		case StringData:
 			str := currentBuffer[2:len(currentBuffer)]
-			gobot.Publish(b.Event("StringData"), string(str[:len(str)]))
-		default:
+			gobot.Publish(b.Event("StringData"), string(str[:len(str)-1]))
 		}
 	}
 	return
