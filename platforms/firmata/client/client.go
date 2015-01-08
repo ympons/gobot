@@ -133,6 +133,7 @@ func (b *Client) Connected() bool {
 // Queries report version until connected
 func (b *Client) Connect() (err error) {
 	if !b.connected {
+		b.Reset()
 		initFunc := b.QueryProtocolVersion
 
 		gobot.Once(b.Event("ProtocolVersion"), func(data interface{}) {
@@ -254,14 +255,8 @@ func (b *Client) I2cWriteRequest(address int, data []byte) error {
 	return b.writeSysex(ret)
 }
 
-// i2xConfig returns i2c configuration.
-func (b *Client) I2cConfig(data []byte) error {
-	ret := []byte{I2CConfig}
-	for _, val := range data {
-		ret = append(ret, byte(val&0xFF))
-		ret = append(ret, byte((val>>8)&0xFF))
-	}
-	return b.writeSysex(ret)
+func (b *Client) I2cConfig(delay int) error {
+	return b.writeSysex([]byte{I2CConfig, byte(delay & 0xFF), byte((delay >> 8) & 0xFF)})
 }
 
 // write is used to send commands to serial port
@@ -308,10 +303,14 @@ func (b *Client) process() (err error) {
 		AnalogMessageRangeEnd >= messageType:
 
 		value := uint(buf[1]) | uint(buf[2])<<7
-		pin := (messageType & 0x0F)
+		pin := int((messageType & 0x0F))
 
-		b.Pins[b.analogPins[pin]].Value = int(value)
-		gobot.Publish(b.Event(fmt.Sprintf("AnalogRead%v", pin)), b.Pins[b.analogPins[pin]].Value)
+		if len(b.analogPins) > pin {
+			if len(b.Pins) > b.analogPins[pin] {
+				b.Pins[b.analogPins[pin]].Value = int(value)
+				gobot.Publish(b.Event(fmt.Sprintf("AnalogRead%v", pin)), b.Pins[b.analogPins[pin]].Value)
+			}
+		}
 	case DigitalMessageRangeStart <= messageType &&
 		DigitalMessageRangeEnd >= messageType:
 
@@ -319,11 +318,12 @@ func (b *Client) process() (err error) {
 		portValue := buf[1] | (buf[2] << 7)
 
 		for i := 0; i < 8; i++ {
-			pinNumber := (8*byte(port) + byte(i))
-			pin := b.Pins[pinNumber]
-			if byte(pin.Mode) == Input {
-				pin.Value = int((portValue >> (byte(i) & 0x07)) & 0x01)
-				gobot.Publish(b.Event(fmt.Sprintf("DigitalRead%v", pinNumber)), pin.Value)
+			pinNumber := int((8*byte(port) + byte(i)))
+			if len(b.Pins) > pinNumber {
+				if b.Pins[pinNumber].Mode == Input {
+					b.Pins[pinNumber].Value = int((portValue >> (byte(i) & 0x07)) & 0x01)
+					gobot.Publish(b.Event(fmt.Sprintf("DigitalRead%v", pinNumber)), b.Pins[pinNumber].Value)
+				}
 			}
 		}
 	case StartSysex == messageType:
@@ -369,6 +369,7 @@ func (b *Client) process() (err error) {
 			gobot.Publish(b.Event("CapabilityQuery"), nil)
 		case AnalogMappingResponse:
 			pinIndex := 0
+			b.analogPins = []int{}
 
 			for _, val := range currentBuffer[2 : len(b.Pins)-1] {
 

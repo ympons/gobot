@@ -2,7 +2,6 @@ package firmata
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"strconv"
 	"time"
@@ -107,9 +106,11 @@ func (f *FirmataAdaptor) ServoWrite(pin string, angle byte) (err error) {
 		return err
 	}
 
-	err = f.board.SetPinMode(p, client.Servo)
-	if err != nil {
-		return err
+	if f.board.Pins[p].Mode != client.Servo {
+		err = f.board.SetPinMode(p, client.Servo)
+		if err != nil {
+			return err
+		}
 	}
 	err = f.board.AnalogWrite(p, int(angle))
 	return
@@ -122,9 +123,11 @@ func (f *FirmataAdaptor) PwmWrite(pin string, level byte) (err error) {
 		return err
 	}
 
-	err = f.board.SetPinMode(p, client.Pwm)
-	if err != nil {
-		return err
+	if f.board.Pins[p].Mode != client.Pwm {
+		err = f.board.SetPinMode(p, client.Pwm)
+		if err != nil {
+			return err
+		}
 	}
 	err = f.board.AnalogWrite(p, int(level))
 	return
@@ -137,9 +140,11 @@ func (f *FirmataAdaptor) DigitalWrite(pin string, level byte) (err error) {
 		return
 	}
 
-	err = f.board.SetPinMode(p, client.Output)
-	if err != nil {
-		return
+	if f.board.Pins[p].Mode != client.Output {
+		err = f.board.SetPinMode(p, client.Output)
+		if err != nil {
+			return
+		}
 	}
 
 	err = f.board.DigitalWrite(p, int(level))
@@ -149,60 +154,46 @@ func (f *FirmataAdaptor) DigitalWrite(pin string, level byte) (err error) {
 // DigitalRead retrieves digital value from specified pin
 // Returns -1 if response from board is timed out
 func (f *FirmataAdaptor) DigitalRead(pin string) (val int, err error) {
-	ret := make(chan int)
-
 	p, err := strconv.Atoi(pin)
 	if err != nil {
 		return
 	}
-	if err = f.board.SetPinMode(p, client.Input); err != nil {
-		return
-	}
-	if err = f.board.TogglePinReporting(p, client.High, client.ReportDigital); err != nil {
-		return
+
+	if f.board.Pins[p].Mode != client.Input {
+		if err = f.board.SetPinMode(p, client.Input); err != nil {
+			return
+		}
+		if err = f.board.TogglePinReporting(p, client.High, client.ReportDigital); err != nil {
+			return
+		}
+		<-time.After(10 * time.Millisecond)
 	}
 
-	gobot.Once(f.board.Event(fmt.Sprintf("DigitalRead%v", pin)), func(data interface{}) {
-		ret <- int(data.([]byte)[0])
-	})
-
-	select {
-	case data := <-ret:
-		return data, nil
-	case <-time.After(10 * time.Millisecond):
-	}
-	return -1, nil
+	return f.board.Pins[p].Value, nil
 }
 
 // AnalogRead retrieves value from analog pin.
 // NOTE pins are numbered A0-A5, which translate to digital pins 14-19
 func (f *FirmataAdaptor) AnalogRead(pin string) (val int, err error) {
-	ret := make(chan int)
-
 	p, err := strconv.Atoi(pin)
 	if err != nil {
 		return
 	}
+
 	p = f.digitalPin(p)
-	if err = f.board.SetPinMode(p, client.Analog); err != nil {
-		return
+
+	if f.board.Pins[p].Mode != client.Analog {
+		if err = f.board.SetPinMode(p, client.Analog); err != nil {
+			return
+		}
+
+		if err = f.board.TogglePinReporting(p, client.High, client.ReportAnalog); err != nil {
+			return
+		}
+		<-time.After(10 * time.Millisecond)
 	}
 
-	if err = f.board.TogglePinReporting(p, client.High, client.ReportAnalog); err != nil {
-		return
-	}
-
-	gobot.Once(f.board.Event(fmt.Sprintf("AnalogRead%v", pin)), func(data interface{}) {
-		b := data.([]byte)
-		ret <- int(uint(b[0])<<24 | uint(b[1])<<16 | uint(b[2])<<8 | uint(b[3]))
-	})
-
-	select {
-	case data := <-ret:
-		return data, nil
-	case <-time.After(10 * time.Millisecond):
-	}
-	return -1, nil
+	return f.board.Pins[p].Value, nil
 }
 
 // digitalPin converts pin number to digital mapping
@@ -213,27 +204,25 @@ func (f *FirmataAdaptor) digitalPin(pin int) int {
 // I2cStart initializes board with i2c configuration
 func (f *FirmataAdaptor) I2cStart(address byte) (err error) {
 	f.i2cAddress = int(address)
-	return f.board.I2cConfig([]byte{0})
+	return f.board.I2cConfig(0)
 }
 
 // I2cRead reads from I2c specified size
 // Returns empty byte array if response is timed out
 func (f *FirmataAdaptor) I2cRead(size uint) (data []byte, err error) {
 	ret := make(chan []byte)
+
 	if err = f.board.I2cReadRequest(f.i2cAddress, int(size)); err != nil {
 		return
 	}
 
 	gobot.Once(f.board.Event("I2cReply"), func(data interface{}) {
-		ret <- data.(map[string][]byte)["data"]
+		ret <- data.(client.I2cReply).Data
 	})
 
-	select {
-	case data := <-ret:
-		return data, nil
-	case <-time.After(10 * time.Millisecond):
-	}
-	return []byte{}, nil
+	data = <-ret
+
+	return
 }
 
 // I2cWrite retrieves i2c data
