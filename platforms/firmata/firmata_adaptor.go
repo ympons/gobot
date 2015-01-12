@@ -1,7 +1,6 @@
 package firmata
 
 import (
-	"errors"
 	"io"
 	"strconv"
 	"time"
@@ -23,14 +22,28 @@ var _ gpio.ServoWriter = (*FirmataAdaptor)(nil)
 
 var _ i2c.I2c = (*FirmataAdaptor)(nil)
 
+type firmataBoard interface {
+	Connect(io.ReadWriteCloser) error
+	Disconnect() error
+	Pins() []client.Pin
+	AnalogWrite(int, int) error
+	SetPinMode(int, int) error
+	TogglePinReporting(int, int, byte) error
+	DigitalWrite(int, int) error
+	I2cReadRequest(int, int) error
+	I2cWriteRequest(int, []byte) error
+	I2cConfig(int) error
+	Event(string) *gobot.Event
+}
+
 // FirmataAdaptor is the Gobot Adaptor for Firmata based boards
 type FirmataAdaptor struct {
 	name       string
 	port       string
-	board      *client.Client
+	board      firmataBoard
 	i2cAddress int
 	conn       io.ReadWriteCloser
-	connect    func(string) (io.ReadWriteCloser, error)
+	openSP     func(port string) (io.ReadWriteCloser, error)
 }
 
 // NewFirmataAdaptor returns a new FirmataAdaptor with specified name and optionally accepts:
@@ -44,10 +57,11 @@ type FirmataAdaptor struct {
 // string port as a label to be displayed in the log and api.
 func NewFirmataAdaptor(name string, args ...interface{}) *FirmataAdaptor {
 	f := &FirmataAdaptor{
-		name: name,
-		port: "",
-		conn: nil,
-		connect: func(port string) (io.ReadWriteCloser, error) {
+		name:  name,
+		port:  "",
+		conn:  nil,
+		board: client.New(),
+		openSP: func(port string) (io.ReadWriteCloser, error) {
 			return serial.OpenPort(&serial.Config{Name: port, Baud: 57600})
 		},
 	}
@@ -67,14 +81,13 @@ func NewFirmataAdaptor(name string, args ...interface{}) *FirmataAdaptor {
 // Connect starts a connection to the board.
 func (f *FirmataAdaptor) Connect() (errs []error) {
 	if f.conn == nil {
-		sp, err := f.connect(f.Port())
+		sp, err := f.openSP(f.Port())
 		if err != nil {
 			return []error{err}
 		}
 		f.conn = sp
 	}
-	f.board = client.New(f.conn)
-	if err := f.board.Connect(); err != nil {
+	if err := f.board.Connect(f.conn); err != nil {
 		return []error{err}
 	}
 	return
@@ -85,7 +98,7 @@ func (f *FirmataAdaptor) Disconnect() (err error) {
 	if f.board != nil {
 		return f.board.Disconnect()
 	}
-	return errors.New("no board connected")
+	return nil
 }
 
 // Finalize terminates the firmata connection
@@ -109,7 +122,7 @@ func (f *FirmataAdaptor) ServoWrite(pin string, angle byte) (err error) {
 		return err
 	}
 
-	if f.board.Pins[p].Mode != client.Servo {
+	if f.board.Pins()[p].Mode != client.Servo {
 		err = f.board.SetPinMode(p, client.Servo)
 		if err != nil {
 			return err
@@ -126,7 +139,7 @@ func (f *FirmataAdaptor) PwmWrite(pin string, level byte) (err error) {
 		return err
 	}
 
-	if f.board.Pins[p].Mode != client.Pwm {
+	if f.board.Pins()[p].Mode != client.Pwm {
 		err = f.board.SetPinMode(p, client.Pwm)
 		if err != nil {
 			return err
@@ -143,7 +156,7 @@ func (f *FirmataAdaptor) DigitalWrite(pin string, level byte) (err error) {
 		return
 	}
 
-	if f.board.Pins[p].Mode != client.Output {
+	if f.board.Pins()[p].Mode != client.Output {
 		err = f.board.SetPinMode(p, client.Output)
 		if err != nil {
 			return
@@ -161,7 +174,7 @@ func (f *FirmataAdaptor) DigitalRead(pin string) (val int, err error) {
 		return
 	}
 
-	if f.board.Pins[p].Mode != client.Input {
+	if f.board.Pins()[p].Mode != client.Input {
 		if err = f.board.SetPinMode(p, client.Input); err != nil {
 			return
 		}
@@ -171,7 +184,7 @@ func (f *FirmataAdaptor) DigitalRead(pin string) (val int, err error) {
 		<-time.After(10 * time.Millisecond)
 	}
 
-	return f.board.Pins[p].Value, nil
+	return f.board.Pins()[p].Value, nil
 }
 
 // AnalogRead retrieves value from analog pin.
@@ -183,7 +196,7 @@ func (f *FirmataAdaptor) AnalogRead(pin string) (val int, err error) {
 	// NOTE pins are numbered A0-A5, which translate to digital pins 14-19
 	p = f.digitalPin(p)
 
-	if f.board.Pins[p].Mode != client.Analog {
+	if f.board.Pins()[p].Mode != client.Analog {
 		if err = f.board.SetPinMode(p, client.Analog); err != nil {
 			return
 		}
@@ -194,7 +207,7 @@ func (f *FirmataAdaptor) AnalogRead(pin string) (val int, err error) {
 		<-time.After(10 * time.Millisecond)
 	}
 
-	return f.board.Pins[p].Value, nil
+	return f.board.Pins()[p].Value, nil
 }
 
 // digitalPin converts pin number to digital mapping

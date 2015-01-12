@@ -60,7 +60,8 @@ func testAnalogMappingResponse() []byte {
 }
 
 func initTestFirmata() *Client {
-	b := New(readWriteCloser{})
+	b := New()
+	b.connection = readWriteCloser{}
 
 	for _, f := range []func() []byte{
 		testProtocolResponse,
@@ -71,6 +72,9 @@ func initTestFirmata() *Client {
 		testReadData = f()
 		b.process()
 	}
+
+	b.connected = true
+	b.Connect(readWriteCloser{})
 
 	return b
 }
@@ -125,13 +129,13 @@ func TestProcess(t *testing.T) {
 			event:    "DigitalRead2",
 			data:     []byte{0x90, 0x04, 0x00},
 			expected: 1,
-			init:     func() { b.Pins[2].Mode = Input },
+			init:     func() { b.pins[2].Mode = Input },
 		},
 		{
 			event:    "DigitalRead4",
 			data:     []byte{0x90, 0x16, 0x00},
 			expected: 1,
-			init:     func() { b.Pins[4].Mode = Input },
+			init:     func() { b.pins[4].Mode = Input },
 		},
 		{
 			event: "PinState13",
@@ -188,7 +192,7 @@ func TestProcess(t *testing.T) {
 }
 
 func TestConnect(t *testing.T) {
-	b := New(readWriteCloser{})
+	b := New()
 
 	testReadData = testProtocolResponse()
 
@@ -212,5 +216,5 @@ func TestConnect(t *testing.T) {
 		testReadData = testProtocolResponse()
 	})
 
-	gobot.Assert(t, b.Connect(), nil)
+	gobot.Assert(t, b.Connect(readWriteCloser{}), nil)
 }
