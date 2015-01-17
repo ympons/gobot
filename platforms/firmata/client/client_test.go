@@ -138,14 +138,10 @@ func TestProcess(t *testing.T) {
 			init:     func() { b.pins[4].Mode = Input },
 		},
 		{
-			event: "PinState13",
-			data:  []byte{240, 110, 13, 1, 1, 247},
-			expected: PinState{
-				Pin:   13,
-				Mode:  1,
-				Value: 1,
-			},
-			init: func() {},
+			event:    "PinState13",
+			data:     []byte{240, 110, 13, 1, 1, 247},
+			expected: Pin{[]int{0, 1, 4}, 1, 0, 1, 127},
+			init:     func() {},
 		},
 		{
 			event: "I2cReply",
