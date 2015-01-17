@@ -28,7 +28,8 @@ type firmataBoard interface {
 	Pins() []client.Pin
 	AnalogWrite(int, int) error
 	SetPinMode(int, int) error
-	TogglePinReporting(int, int, byte) error
+	ReportAnalog(int, int) error
+	ReportDigital(int, int) error
 	DigitalWrite(int, int) error
 	I2cReadRequest(int, int) error
 	I2cWriteRequest(int, []byte) error
@@ -178,7 +179,7 @@ func (f *FirmataAdaptor) DigitalRead(pin string) (val int, err error) {
 		if err = f.board.SetPinMode(p, client.Input); err != nil {
 			return
 		}
-		if err = f.board.TogglePinReporting(p, client.High, client.ReportDigital); err != nil {
+		if err = f.board.ReportDigital(p, 1); err != nil {
 			return
 		}
 		<-time.After(10 * time.Millisecond)
@@ -201,7 +202,7 @@ func (f *FirmataAdaptor) AnalogRead(pin string) (val int, err error) {
 			return
 		}
 
-		if err = f.board.TogglePinReporting(p, client.High, client.ReportAnalog); err != nil {
+		if err = f.board.ReportAnalog(p, 1); err != nil {
 			return
 		}
 		<-time.After(10 * time.Millisecond)
