@@ -141,18 +141,18 @@ func (b *Client) Connect(conn io.ReadWriteCloser) (err error) {
 	b.connection = conn
 	b.Reset()
 
-	initFunc := b.QueryProtocolVersion
+	initFunc := b.ProtocolVersionQuery
 
 	gobot.Once(b.Event("ProtocolVersion"), func(data interface{}) {
-		initFunc = b.QueryFirmware
+		initFunc = b.FirmwareQuery
 	})
 
 	gobot.Once(b.Event("FirmwareQuery"), func(data interface{}) {
-		initFunc = b.QueryCapabilities
+		initFunc = b.CapabilitiesQuery
 	})
 
 	gobot.Once(b.Event("CapabilityQuery"), func(data interface{}) {
-		initFunc = b.QueryAnalogMapping
+		initFunc = b.AnalogMappingQuery
 	})
 
 	gobot.Once(b.Event("AnalogMappingQuery"), func(data interface{}) {
@@ -232,28 +232,28 @@ func (b *Client) AnalogWrite(pin int, value int) error {
 	return b.write([]byte{AnalogMessage | byte(pin), byte(value & 0x7F), byte((value >> 7) & 0x7F)})
 }
 
-// QueryFirmware sends the FirmwareQuery sysex code.
-func (b *Client) QueryFirmware() error {
+// FirmwareQuery sends the FirmwareQuery sysex code.
+func (b *Client) FirmwareQuery() error {
 	return b.writeSysex([]byte{FirmwareQuery})
 }
 
-// QueryPinState sends a PinStateQuery for pin.
-func (b *Client) QueryPinState(pin int) error {
+// PinStateQuery sends a PinStateQuery for pin.
+func (b *Client) PinStateQuery(pin int) error {
 	return b.writeSysex([]byte{PinStateQuery, byte(pin)})
 }
 
-// QueryProtocolVersion sends the ProtocolVersion sysex code.
-func (b *Client) QueryProtocolVersion() error {
+// ProtocolVersionQuery sends the ProtocolVersion sysex code.
+func (b *Client) ProtocolVersionQuery() error {
 	return b.write([]byte{ProtocolVersion})
 }
 
-// QueryCapabilities sends the CapabilityQuery sysex code.
-func (b *Client) QueryCapabilities() error {
+// CapabilitiesQuery sends the CapabilityQuery sysex code.
+func (b *Client) CapabilitiesQuery() error {
 	return b.writeSysex([]byte{CapabilityQuery})
 }
 
-// QueryAnalogMapping sends the AnalogMappingQuery sysex code.
-func (b *Client) QueryAnalogMapping() error {
+// AnalogMappingQuery sends the AnalogMappingQuery sysex code.
+func (b *Client) AnalogMappingQuery() error {
 	return b.writeSysex([]byte{AnalogMappingQuery})
 }
 
@@ -269,14 +269,14 @@ func (b *Client) ReportAnalog(pin int, state int) error {
 	return b.togglePinReporting(pin, state, ReportAnalog)
 }
 
-// I2cReadRequest requests numBytes from address.
-func (b *Client) I2cReadRequest(address int, numBytes int) error {
+// I2cRead reads numBytes from address once.
+func (b *Client) I2cRead(address int, numBytes int) error {
 	return b.writeSysex([]byte{I2CRequest, byte(address), (I2CModeRead << 3),
 		byte(numBytes) & 0x7F, (byte(numBytes) >> 7) & 0x7F})
 }
 
-// I2cWriteRequest writes to address.
-func (b *Client) I2cWriteRequest(address int, data []byte) error {
+// I2cWrite writes data to address.
+func (b *Client) I2cWrite(address int, data []byte) error {
 	ret := []byte{I2CRequest, byte(address), (I2CModeWrite << 3)}
 	for _, val := range data {
 		ret = append(ret, byte(val&0x7F))

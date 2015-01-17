@@ -82,19 +82,19 @@ func initTestFirmata() *Client {
 func TestReportVersion(t *testing.T) {
 	b := initTestFirmata()
 	//test if functions executes
-	b.QueryProtocolVersion()
+	b.ProtocolVersionQuery()
 }
 
 func TestQueryFirmware(t *testing.T) {
 	b := initTestFirmata()
 	//test if functions executes
-	b.QueryFirmware()
+	b.FirmwareQuery()
 }
 
 func TestQueryPinState(t *testing.T) {
 	b := initTestFirmata()
 	//test if functions executes
-	b.QueryPinState(1)
+	b.PinStateQuery(1)
 }
 
 func TestProcess(t *testing.T) {
@@ -208,6 +208,7 @@ func TestConnect(t *testing.T) {
 	})
 
 	gobot.Once(b.Event("AnalogMappingQuery"), func(data interface{}) {
+
 		<-time.After(1 * time.Millisecond)
 		testReadData = testProtocolResponse()
 	})
