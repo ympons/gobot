@@ -1,5 +1,5 @@
 // Package client provies a client for interacting with microcontrollers
-// using the Firmata protocol.
+// using the Firmata protocol https://github.com/firmata/protocol.
 package client
 
 import (
@@ -51,6 +51,7 @@ const (
 	I2CModeRead              byte = 0x01
 	I2CmodeContinuousRead    byte = 0x02
 	I2CModeStopReading       byte = 0x03
+	ServoConfig              byte = 0x70
 )
 
 // Errors
@@ -210,6 +211,19 @@ func (b *Client) DigitalWrite(pin int, value int) error {
 		}
 	}
 	return b.write([]byte{DigitalMessage | port, portValue & 0x7F, (portValue >> 7) & 0x7F})
+}
+
+// ServoConfig sets the min and max pulse width for servo PWM range
+func (b *Client) ServoConfig(pin int, max int, min int) error {
+	ret := []byte{
+		ServoConfig,
+		byte(pin),
+		byte(max & 0x7F),
+		byte((max >> 7) & 0x7F),
+		byte(min & 0x7F),
+		byte((min >> 7) & 0x7F),
+	}
+	return b.writeSysex(ret)
 }
 
 // AnalogWrite writes value to pin.
