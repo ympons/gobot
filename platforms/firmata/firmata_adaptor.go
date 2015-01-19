@@ -31,8 +31,8 @@ type firmataBoard interface {
 	ReportAnalog(int, int) error
 	ReportDigital(int, int) error
 	DigitalWrite(int, int) error
-	I2cReadRequest(int, int) error
-	I2cWriteRequest(int, []byte) error
+	I2cRead(int, int) error
+	I2cWrite(int, []byte) error
 	I2cConfig(int) error
 	Event(string) *gobot.Event
 }
@@ -226,7 +226,7 @@ func (f *FirmataAdaptor) I2cStart(address byte) (err error) {
 func (f *FirmataAdaptor) I2cRead(size uint) (data []byte, err error) {
 	ret := make(chan []byte)
 
-	if err = f.board.I2cReadRequest(f.i2cAddress, int(size)); err != nil {
+	if err = f.board.I2cRead(f.i2cAddress, int(size)); err != nil {
 		return
 	}
 
@@ -241,5 +241,5 @@ func (f *FirmataAdaptor) I2cRead(size uint) (data []byte, err error) {
 
 // I2cWrite writes data to i2c device
 func (f *FirmataAdaptor) I2cWrite(data []byte) (err error) {
-	return f.board.I2cWriteRequest(f.i2cAddress, data)
+	return f.board.I2cWrite(f.i2cAddress, data)
 }

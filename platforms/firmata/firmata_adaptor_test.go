@@ -60,14 +60,14 @@ func (m mockFirmataBoard) Disconnect() error {
 func (m mockFirmataBoard) Pins() []client.Pin {
 	return m.pins
 }
-func (mockFirmataBoard) AnalogWrite(int, int) error        { return nil }
-func (mockFirmataBoard) SetPinMode(int, int) error         { return nil }
-func (mockFirmataBoard) ReportAnalog(int, int) error       { return nil }
-func (mockFirmataBoard) ReportDigital(int, int) error      { return nil }
-func (mockFirmataBoard) DigitalWrite(int, int) error       { return nil }
-func (mockFirmataBoard) I2cReadRequest(int, int) error     { return nil }
-func (mockFirmataBoard) I2cWriteRequest(int, []byte) error { return nil }
-func (mockFirmataBoard) I2cConfig(int) error               { return nil }
+func (mockFirmataBoard) AnalogWrite(int, int) error   { return nil }
+func (mockFirmataBoard) SetPinMode(int, int) error    { return nil }
+func (mockFirmataBoard) ReportAnalog(int, int) error  { return nil }
+func (mockFirmataBoard) ReportDigital(int, int) error { return nil }
+func (mockFirmataBoard) DigitalWrite(int, int) error  { return nil }
+func (mockFirmataBoard) I2cRead(int, int) error       { return nil }
+func (mockFirmataBoard) I2cWrite(int, []byte) error   { return nil }
+func (mockFirmataBoard) I2cConfig(int) error          { return nil }
 
 func initTestFirmataAdaptor() *FirmataAdaptor {
 	a := NewFirmataAdaptor("board", "/dev/null")
