@@ -8,8 +8,6 @@ import (
 	"io"
 	"math"
 	"time"
-
-	"github.com/hybridgroup/gobot"
 )
 
 // Pin Modes
@@ -62,13 +60,18 @@ var (
 // Client represents a client connection to a firmata board
 type Client struct {
 	pins             []Pin
-	FirmwareName     string
-	ProtocolVersion  string
+	firmwareName     string
+	protocolVersion  string
 	connected        bool
 	connection       io.ReadWriteCloser
 	analogPins       []int
 	initTimeInterval time.Duration
-	gobot.Eventer
+	pinReportChan    map[int]chan Pin
+	pinStateChan     map[int]chan Pin
+	i2cChan          chan I2cReply
+	boolChan         map[string]chan bool
+	stringDataChan   chan string
+	Error            chan error
 }
 
 // Pin represents a pin on the firmata board
@@ -90,25 +93,22 @@ type I2cReply struct {
 // New returns a new Client
 func New() *Client {
 	c := &Client{
-		ProtocolVersion: "",
-		FirmwareName:    "",
+		protocolVersion: "",
+		firmwareName:    "",
 		connection:      nil,
 		pins:            []Pin{},
 		analogPins:      []int{},
 		connected:       false,
-		Eventer:         gobot.NewEventer(),
-	}
-
-	for _, s := range []string{
-		"FirmwareQuery",
-		"CapabilityQuery",
-		"AnalogMappingQuery",
-		"ProtocolVersion",
-		"I2cReply",
-		"StringData",
-		"Error",
-	} {
-		c.AddEvent(s)
+		pinReportChan:   make(map[int]chan Pin),
+		pinStateChan:    make(map[int]chan Pin),
+		i2cChan:         make(chan I2cReply),
+		stringDataChan:  make(chan string),
+		boolChan: map[string]chan bool{
+			"CapabilityQuery":    make(chan bool),
+			"AnalogMappingQuery": make(chan bool),
+			"FirmwareQuery":      make(chan bool),
+			"ProtocolVersion":    make(chan bool),
+		},
 	}
 
 	return c
@@ -125,6 +125,16 @@ func (b *Client) Connected() bool {
 	return b.connected
 }
 
+// FirmwareName returns the name of the current firmware
+func (b *Client) FirmwareName() string {
+	return b.firmwareName
+}
+
+// ProtocolVersion returns the current firmata version
+func (b *Client) ProtocolVersion() string {
+	return b.protocolVersion
+}
+
 // Pins returns all available pins
 func (b *Client) Pins() []Pin {
 	return b.pins
@@ -133,51 +143,45 @@ func (b *Client) Pins() []Pin {
 // Connect connects to the Client given conn. It first resets the firmata board
 // then continuously polls the firmata board for new information when it's
 // available.
-func (b *Client) Connect(conn io.ReadWriteCloser) (err error) {
-	if b.connected {
+func (c *Client) Connect(conn io.ReadWriteCloser) (err error) {
+	if c.connected {
 		return ErrConnected
 	}
 
-	b.connection = conn
-	b.Reset()
+	c.connection = conn
+	if err := c.Reset(); err != nil {
+		return err
+	}
 
-	initFunc := b.ProtocolVersionQuery
-
-	gobot.Once(b.Event("ProtocolVersion"), func(data interface{}) {
-		initFunc = b.FirmwareQuery
-	})
-
-	gobot.Once(b.Event("FirmwareQuery"), func(data interface{}) {
-		initFunc = b.CapabilitiesQuery
-	})
-
-	gobot.Once(b.Event("CapabilityQuery"), func(data interface{}) {
-		initFunc = b.AnalogMappingQuery
-	})
-
-	gobot.Once(b.Event("AnalogMappingQuery"), func(data interface{}) {
-		initFunc = func() error { return nil }
-		b.ReportDigital(0, 1)
-		b.ReportDigital(1, 1)
-		b.connected = true
-	})
+	go func() {
+		s, _ := c.ProtocolVersionQuery()
+		<-s
+		s, _ = c.FirmwareQuery()
+		<-s
+		s, _ = c.CapabilityQuery()
+		<-s
+		s, _ = c.AnalogMappingQuery()
+		c.connected = true
+		<-s
+		c.ReportDigital(0, 1)
+		c.ReportDigital(1, 1)
+	}()
 
 	for {
-		if err := initFunc(); err != nil {
+		if err := c.process(); err != nil {
 			return err
 		}
-		if err := b.process(); err != nil {
-			return err
-		}
-		if b.connected {
+		if c.connected {
 			go func() {
 				for {
-					if !b.connected {
+					if !c.connected {
 						break
 					}
-
-					if err := b.process(); err != nil {
-						gobot.Publish(b.Event("Error"), err)
+					if err := c.process(); err != nil {
+						select {
+						case c.Error <- err:
+						default:
+						}
 					}
 				}
 			}()
@@ -194,8 +198,11 @@ func (b *Client) Reset() error {
 
 // SetPinMode sets the pin to mode.
 func (b *Client) SetPinMode(pin int, mode int) error {
+	if err := b.write([]byte{PinMode, byte(pin), byte(mode)}); err != nil {
+		return err
+	}
 	b.pins[byte(pin)].Mode = mode
-	return b.write([]byte{PinMode, byte(pin), byte(mode)})
+	return nil
 }
 
 // DigitalWrite writes value to pin.
@@ -228,51 +235,82 @@ func (b *Client) ServoConfig(pin int, max int, min int) error {
 
 // AnalogWrite writes value to pin.
 func (b *Client) AnalogWrite(pin int, value int) error {
+	if err := b.write([]byte{
+		AnalogMessage | byte(pin),
+		byte(value & 0x7F),
+		byte((value >> 7) & 0x7F),
+	}); err != nil {
+		return err
+	}
 	b.pins[pin].Value = value
-	return b.write([]byte{AnalogMessage | byte(pin), byte(value & 0x7F), byte((value >> 7) & 0x7F)})
+	return nil
 }
 
 // FirmwareQuery sends the FirmwareQuery sysex code.
-func (b *Client) FirmwareQuery() error {
-	return b.writeSysex([]byte{FirmwareQuery})
+func (b *Client) FirmwareQuery() (chan bool, error) {
+	if err := b.writeSysex([]byte{FirmwareQuery}); err != nil {
+		return nil, err
+	}
+	b.boolChan["FirmwareQuery"] = make(chan bool)
+	return b.boolChan["FirmwareQuery"], nil
 }
 
 // PinStateQuery sends a PinStateQuery for pin.
-func (b *Client) PinStateQuery(pin int) error {
-	return b.writeSysex([]byte{PinStateQuery, byte(pin)})
+func (b *Client) PinStateQuery(pin int) (chan Pin, error) {
+	if err := b.writeSysex([]byte{PinStateQuery, byte(pin)}); err != nil {
+		return nil, err
+	}
+	b.pinStateChan[pin] = make(chan Pin)
+	return b.pinStateChan[pin], nil
 }
 
 // ProtocolVersionQuery sends the ProtocolVersion sysex code.
-func (b *Client) ProtocolVersionQuery() error {
-	return b.write([]byte{ProtocolVersion})
+func (b *Client) ProtocolVersionQuery() (chan bool, error) {
+	if err := b.write([]byte{ProtocolVersion}); err != nil {
+		return nil, err
+	}
+	b.boolChan["ProtocolVersion"] = make(chan bool)
+	return b.boolChan["ProtocolVersion"], nil
 }
 
-// CapabilitiesQuery sends the CapabilityQuery sysex code.
-func (b *Client) CapabilitiesQuery() error {
-	return b.writeSysex([]byte{CapabilityQuery})
+// CapabilityQuery sends the CapabilityQuery sysex code.
+func (b *Client) CapabilityQuery() (chan bool, error) {
+	if err := b.writeSysex([]byte{CapabilityQuery}); err != nil {
+		return nil, err
+	}
+	b.boolChan["CapabilityQuery"] = make(chan bool)
+	return b.boolChan["CapabilityQuery"], nil
 }
 
 // AnalogMappingQuery sends the AnalogMappingQuery sysex code.
-func (b *Client) AnalogMappingQuery() error {
-	return b.writeSysex([]byte{AnalogMappingQuery})
+func (b *Client) AnalogMappingQuery() (chan bool, error) {
+	if err := b.writeSysex([]byte{AnalogMappingQuery}); err != nil {
+		return nil, err
+	}
+	b.boolChan["AnalogMappingQuery"] = make(chan bool)
+	return b.boolChan["AnalogMappingQuery"], nil
 }
 
 // ReportDigital enables or disables digital reporting for pin, a non zero
 // state enables reporting
-func (b *Client) ReportDigital(pin int, state int) error {
+func (b *Client) ReportDigital(pin int, state int) (chan Pin, error) {
 	return b.togglePinReporting(pin, state, ReportDigital)
 }
 
 // ReportAnalog enables or disables analog reporting for pin, a non zero
 // state enables reporting
-func (b *Client) ReportAnalog(pin int, state int) error {
+func (b *Client) ReportAnalog(pin int, state int) (chan Pin, error) {
 	return b.togglePinReporting(pin, state, ReportAnalog)
 }
 
 // I2cRead reads numBytes from address once.
-func (b *Client) I2cRead(address int, numBytes int) error {
-	return b.writeSysex([]byte{I2CRequest, byte(address), (I2CModeRead << 3),
-		byte(numBytes) & 0x7F, (byte(numBytes) >> 7) & 0x7F})
+func (b *Client) I2cRead(address int, numBytes int) (chan I2cReply, error) {
+	if err := b.writeSysex([]byte{I2CRequest, byte(address), (I2CModeRead << 3),
+		byte(numBytes) & 0x7F, (byte(numBytes) >> 7) & 0x7F}); err != nil {
+		return nil, err
+	}
+	b.i2cChan = make(chan I2cReply)
+	return b.i2cChan, nil
 }
 
 // I2cWrite writes data to address.
@@ -291,7 +329,7 @@ func (b *Client) I2cConfig(delay int) error {
 	return b.writeSysex([]byte{I2CConfig, byte(delay & 0xFF), byte((delay >> 8) & 0xFF)})
 }
 
-func (b *Client) togglePinReporting(pin int, state int, mode byte) error {
+func (b *Client) togglePinReporting(pin int, state int, mode byte) (chan Pin, error) {
 	if state != 0 {
 		state = 1
 	} else {
@@ -299,10 +337,12 @@ func (b *Client) togglePinReporting(pin int, state int, mode byte) error {
 	}
 
 	if err := b.write([]byte{byte(mode) | byte(pin), byte(state)}); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	b.pinReportChan[pin] = make(chan Pin)
+
+	return b.pinReportChan[pin], nil
 
 }
 
@@ -341,9 +381,12 @@ func (b *Client) process() (err error) {
 	messageType := buf[0]
 	switch {
 	case ProtocolVersion == messageType:
-		b.ProtocolVersion = fmt.Sprintf("%v.%v", buf[1], buf[2])
+		b.protocolVersion = fmt.Sprintf("%v.%v", buf[1], buf[2])
 
-		gobot.Publish(b.Event("ProtocolVersion"), b.ProtocolVersion)
+		select {
+		case b.boolChan["ProtocolVersion"] <- true:
+		default:
+		}
 	case AnalogMessageRangeStart <= messageType &&
 		AnalogMessageRangeEnd >= messageType:
 
@@ -353,7 +396,10 @@ func (b *Client) process() (err error) {
 		if len(b.analogPins) > pin {
 			if len(b.pins) > b.analogPins[pin] {
 				b.pins[b.analogPins[pin]].Value = int(value)
-				gobot.Publish(b.Event(fmt.Sprintf("AnalogRead%v", pin)), b.pins[b.analogPins[pin]].Value)
+				select {
+				case b.pinReportChan[b.analogPins[pin]] <- b.pins[b.analogPins[pin]]:
+				default:
+				}
 			}
 		}
 	case DigitalMessageRangeStart <= messageType &&
@@ -367,7 +413,10 @@ func (b *Client) process() (err error) {
 			if len(b.pins) > pinNumber {
 				if b.pins[pinNumber].Mode == Input {
 					b.pins[pinNumber].Value = int((portValue >> (byte(i) & 0x07)) & 0x01)
-					gobot.Publish(b.Event(fmt.Sprintf("DigitalRead%v", pinNumber)), b.pins[pinNumber].Value)
+					select {
+					case b.pinReportChan[pinNumber] <- b.pins[pinNumber]:
+					default:
+					}
 				}
 			}
 		}
@@ -400,8 +449,6 @@ func (b *Client) process() (err error) {
 					}
 
 					b.pins = append(b.pins, Pin{SupportedModes: modes, Mode: Output})
-					b.AddEvent(fmt.Sprintf("DigitalRead%v", len(b.pins)-1))
-					b.AddEvent(fmt.Sprintf("PinState%v", len(b.pins)-1))
 					supportedModes = 0
 					n = 0
 					continue
@@ -412,7 +459,10 @@ func (b *Client) process() (err error) {
 				}
 				n ^= 1
 			}
-			gobot.Publish(b.Event("CapabilityQuery"), nil)
+			select {
+			case b.boolChan["CapabilityQuery"] <- true:
+			default:
+			}
 		case AnalogMappingResponse:
 			pinIndex := 0
 			b.analogPins = []int{}
@@ -424,12 +474,14 @@ func (b *Client) process() (err error) {
 				if val != 127 {
 					b.analogPins = append(b.analogPins, pinIndex)
 				}
-				b.AddEvent(fmt.Sprintf("AnalogRead%v", pinIndex))
 				pinIndex++
 			}
-			gobot.Publish(b.Event("AnalogMappingQuery"), nil)
+			select {
+			case b.boolChan["AnalogMappingQuery"] <- true:
+			default:
+			}
 		case PinStateResponse:
-			pin := currentBuffer[2]
+			pin := int(currentBuffer[2])
 			b.pins[pin].Mode = int(currentBuffer[3])
 			b.pins[pin].State = int(currentBuffer[4])
 
@@ -440,7 +492,10 @@ func (b *Client) process() (err error) {
 				b.pins[pin].State = int(uint(b.pins[pin].State) | uint(currentBuffer[6])<<14)
 			}
 
-			gobot.Publish(b.Event(fmt.Sprintf("PinState%v", pin)), b.pins[pin])
+			select {
+			case b.pinStateChan[pin] <- b.pins[pin]:
+			default:
+			}
 		case I2CReply:
 			reply := I2cReply{
 				Address:  int(byte(currentBuffer[2]) | byte(currentBuffer[3])<<7),
@@ -458,7 +513,10 @@ func (b *Client) process() (err error) {
 					byte(currentBuffer[i])|byte(currentBuffer[i+1])<<7,
 				)
 			}
-			gobot.Publish(b.Event("I2cReply"), reply)
+			select {
+			case b.i2cChan <- reply:
+			default:
+			}
 		case FirmwareQuery:
 			name := []byte{}
 			for _, val := range currentBuffer[4:(len(currentBuffer) - 1)] {
@@ -466,11 +524,17 @@ func (b *Client) process() (err error) {
 					name = append(name, val)
 				}
 			}
-			b.FirmwareName = string(name[:])
-			gobot.Publish(b.Event("FirmwareQuery"), b.FirmwareName)
+			b.firmwareName = string(name[:])
+			select {
+			case b.boolChan["FirmwareQuery"] <- true:
+			default:
+			}
 		case StringData:
 			str := currentBuffer[2:len(currentBuffer)]
-			gobot.Publish(b.Event("StringData"), string(str[:len(str)-1]))
+			select {
+			case b.stringDataChan <- string(str[:len(str)-1]):
+			default:
+			}
 		}
 	}
 	return
