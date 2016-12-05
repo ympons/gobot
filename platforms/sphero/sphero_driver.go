@@ -9,12 +9,13 @@ import (
 	"github.com/hybridgroup/gobot"
 )
 
-var _ gobot.Driver = (*SpheroDriver)(nil)
-
 const (
+	// event when error encountered
+	Error = "error"
+	// event when sensor data is received
 	SensorData = "sensordata"
-	Collision  = "collision"
-	Error      = "error"
+	// event when collision is detected
+	Collision = "collision"
 )
 
 type packet struct {
@@ -159,7 +160,7 @@ func (s *SpheroDriver) Start() (errs []error) {
 			packet := <-s.packetChannel
 			err := s.write(packet)
 			if err != nil {
-				gobot.Publish(s.Event(Error), err)
+				s.Publish(Error, err)
 			}
 		}
 	}()
@@ -174,7 +175,7 @@ func (s *SpheroDriver) Start() (errs []error) {
 	go func() {
 		for {
 			header := s.readHeader()
-			if header != nil && len(header) != 0 {
+			if len(header) > 0 {
 				body := s.readBody(header[4])
 				data := append(header, body...)
 				checksum := data[len(data)-1]
@@ -268,7 +269,7 @@ func (s *SpheroDriver) SetHeading(heading uint16) {
 // SetStabilization enables or disables the built-in auto stabilizing features of the Sphero
 func (s *SpheroDriver) SetStabilization(on bool) {
 	b := uint8(0x01)
-	if on == false {
+	if !on {
 		b = 0x00
 	}
 	s.packetChannel <- s.craftPacket([]uint8{b}, 0x02, 0x02)
@@ -317,7 +318,7 @@ func (s *SpheroDriver) handleCollisionDetected(data []uint8) {
 	var collision CollisionPacket
 	buffer := bytes.NewBuffer(data[5:]) // skip header
 	binary.Read(buffer, binary.BigEndian, &collision)
-	gobot.Publish(s.Event(Collision), collision)
+	s.Publish(Collision, collision)
 }
 
 func (s *SpheroDriver) handleDataStreaming(data []uint8) {
@@ -328,7 +329,7 @@ func (s *SpheroDriver) handleDataStreaming(data []uint8) {
 	var dataPacket DataStreamingPacket
 	buffer := bytes.NewBuffer(data[5:]) // skip header
 	binary.Read(buffer, binary.BigEndian, &dataPacket)
-	gobot.Publish(s.Event(SensorData), dataPacket)
+	s.Publish(SensorData, dataPacket)
 }
 
 func (s *SpheroDriver) getSyncResponse(packet *packet) []byte {

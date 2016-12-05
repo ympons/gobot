@@ -2,9 +2,11 @@ package gobot_test
 
 import (
 	"fmt"
-	"github.com/hybridgroup/gobot"
 	"testing"
 	"time"
+
+	"github.com/hybridgroup/gobot"
+	"github.com/hybridgroup/gobot/gobottest"
 )
 
 func ExampleEvery() {
@@ -19,33 +21,9 @@ func ExampleAfter() {
 	})
 }
 
-func ExamplePublish() {
-	e := gobot.NewEvent()
-	gobot.Publish(e, 100)
-}
-
-func ExampleOn() {
-	e := gobot.NewEvent()
-	gobot.On(e, func(s interface{}) {
-		fmt.Println(s)
-	})
-	gobot.Publish(e, 100)
-	gobot.Publish(e, 200)
-}
-
-func ExampleOnce() {
-	e := gobot.NewEvent()
-	gobot.Once(e, func(s interface{}) {
-		fmt.Println(s)
-		fmt.Println("I will no longer respond to events")
-	})
-	gobot.Publish(e, 100)
-	gobot.Publish(e, 200)
-}
-
 func ExampleRand() {
 	i := gobot.Rand(100)
-	fmt.Sprintln("%v is > 0 && < 100", i)
+	fmt.Printf("%v is > 0 && < 100", i)
 }
 
 func ExampleFromScale() {
@@ -64,12 +42,12 @@ func ExampleAssert() {
 	t := &testing.T{}
 	var a int = 100
 	var b int = 100
-	gobot.Assert(t, a, b)
+	gobottest.Assert(t, a, b)
 }
 
 func ExampleRefute() {
 	t := &testing.T{}
 	var a int = 100
 	var b int = 200
-	gobot.Refute(t, a, b)
+	gobottest.Refute(t, a, b)
 }

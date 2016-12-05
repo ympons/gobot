@@ -4,7 +4,10 @@ import (
 	"testing"
 
 	"github.com/hybridgroup/gobot"
+	"github.com/hybridgroup/gobot/gobottest"
 )
+
+var _ gobot.Adaptor = (*PebbleAdaptor)(nil)
 
 func initTestPebbleAdaptor() *PebbleAdaptor {
 	return NewPebbleAdaptor("pebble")
@@ -12,14 +15,14 @@ func initTestPebbleAdaptor() *PebbleAdaptor {
 
 func TestPebbleAdaptor(t *testing.T) {
 	a := initTestPebbleAdaptor()
-	gobot.Assert(t, a.Name(), "pebble")
+	gobottest.Assert(t, a.Name(), "pebble")
 }
 func TestPebbleAdaptorConnect(t *testing.T) {
 	a := initTestPebbleAdaptor()
-	gobot.Assert(t, len(a.Connect()), 0)
+	gobottest.Assert(t, len(a.Connect()), 0)
 }
 
 func TestPebbleAdaptorFinalize(t *testing.T) {
 	a := initTestPebbleAdaptor()
-	gobot.Assert(t, len(a.Finalize()), 0)
+	gobottest.Assert(t, len(a.Finalize()), 0)
 }

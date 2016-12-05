@@ -32,8 +32,9 @@ func NewJSONGobot(gobot *Gobot) *JSONGobot {
 // Gobot is the main type of your Gobot application and contains a collection of
 // Robots, API commands and Events.
 type Gobot struct {
-	robots *Robots
-	trap   func(chan os.Signal)
+	robots   *Robots
+	trap     func(chan os.Signal)
+	AutoStop bool
 	Commander
 	Eventer
 }
@@ -45,14 +46,15 @@ func NewGobot() *Gobot {
 		trap: func(c chan os.Signal) {
 			signal.Notify(c, os.Interrupt)
 		},
+		AutoStop:  true,
 		Commander: NewCommander(),
 		Eventer:   NewEventer(),
 	}
 }
 
-// Start calls the Start method on each robot in it's collection of robots, and
-// stops all robots on reception of a SIGINT. Start will block the execution of
-// your main function until it receives the SIGINT.
+// Start calls the Start method on each robot in its collection of robots. On
+// error, call Stop to ensure that all robots are returned to a sane, stopped
+// state.
 func (g *Gobot) Start() (errs []error) {
 	if rerrs := g.robots.Start(); len(rerrs) > 0 {
 		for _, err := range rerrs {
@@ -61,31 +63,34 @@ func (g *Gobot) Start() (errs []error) {
 		}
 	}
 
-	c := make(chan os.Signal, 1)
-	g.trap(c)
-	if len(errs) > 0 {
-		// there was an error during start, so we immediatly pass the interrupt
-		// in order to disconnect the initialized robots, connections and devices
-		c <- os.Interrupt
+	if g.AutoStop {
+		c := make(chan os.Signal, 1)
+		g.trap(c)
+		if len(errs) > 0 {
+			// there was an error during start, so we immediately pass the interrupt
+			// in order to disconnect the initialized robots, connections and devices
+			c <- os.Interrupt
+		}
+
+		// waiting for interrupt coming on the channel
+		<-c
+
+		// Stop calls the Stop method on each robot in its collection of robots.
+		g.Stop()
 	}
 
-	// waiting for interrupt coming on the channel
-	_ = <-c
-	g.robots.Each(func(r *Robot) {
-		log.Println("Stopping Robot", r.Name, "...")
-		if herrs := r.Devices().Halt(); len(herrs) > 0 {
-			for _, err := range herrs {
-				log.Println("Error:", err)
-				errs = append(errs, err)
-			}
+	return errs
+}
+
+// Stop calls the Stop method on each robot in its collection of robots.
+func (g *Gobot) Stop() (errs []error) {
+	if rerrs := g.robots.Stop(); len(rerrs) > 0 {
+		for _, err := range rerrs {
+			log.Println("Error:", err)
+			errs = append(errs, err)
 		}
-		if cerrs := r.Connections().Finalize(); len(cerrs) > 0 {
-			for _, err := range cerrs {
-				log.Println("Error:", err)
-				errs = append(errs, err)
-			}
-		}
-	})
+	}
+
 	return errs
 }
 

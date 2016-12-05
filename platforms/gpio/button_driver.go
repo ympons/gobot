@@ -1,12 +1,9 @@
 package gpio
 
 import (
-	"time"
-
 	"github.com/hybridgroup/gobot"
+	"time"
 )
-
-var _ gobot.Driver = (*ButtonDriver)(nil)
 
 // ButtonDriver Represents a digital Button
 type ButtonDriver struct {
@@ -22,7 +19,7 @@ type ButtonDriver struct {
 // NewButtonDriver returns a new ButtonDriver with a polling interval of
 // 10 Milliseconds given a DigitalReader, name and pin.
 //
-// Optinally accepts:
+// Optionally accepts:
 //  time.Duration: Interval at which the ButtonDriver is polled for new information
 func NewButtonDriver(a DigitalReader, name string, pin string, v ...time.Duration) *ButtonDriver {
 	b := &ButtonDriver{
@@ -39,8 +36,8 @@ func NewButtonDriver(a DigitalReader, name string, pin string, v ...time.Duratio
 		b.interval = v[0]
 	}
 
-	b.AddEvent(Push)
-	b.AddEvent(Release)
+	b.AddEvent(ButtonPush)
+	b.AddEvent(ButtonRelease)
 	b.AddEvent(Error)
 
 	return b
@@ -58,7 +55,7 @@ func (b *ButtonDriver) Start() (errs []error) {
 		for {
 			newValue, err := b.connection.DigitalRead(b.Pin())
 			if err != nil {
-				gobot.Publish(b.Event(Error), err)
+				b.Publish(Error, err)
 			} else if newValue != state && newValue != -1 {
 				state = newValue
 				b.update(newValue)
@@ -91,9 +88,9 @@ func (b *ButtonDriver) Connection() gobot.Connection { return b.connection.(gobo
 func (b *ButtonDriver) update(newValue int) {
 	if newValue == 1 {
 		b.Active = true
-		gobot.Publish(b.Event(Push), newValue)
+		b.Publish(ButtonPush, newValue)
 	} else {
 		b.Active = false
-		gobot.Publish(b.Event(Release), newValue)
+		b.Publish(ButtonRelease, newValue)
 	}
 }

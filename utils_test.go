@@ -4,41 +4,9 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/hybridgroup/gobot/gobottest"
 )
-
-func TestAssert(t *testing.T) {
-	err := ""
-	errFunc = func(t *testing.T, message string) {
-		err = message
-	}
-
-	Assert(t, 1, 1)
-	if err != "" {
-		t.Errorf("Assert failed: 1 should equal 1")
-	}
-
-	Assert(t, 1, 2)
-	if err == "" {
-		t.Errorf("Assert failed: 1 should not equal 2")
-	}
-}
-
-func TestRefute(t *testing.T) {
-	err := ""
-	errFunc = func(t *testing.T, message string) {
-		err = message
-	}
-
-	Refute(t, 1, 2)
-	if err != "" {
-		t.Errorf("Refute failed: 1 should not be 2")
-	}
-
-	Refute(t, 1, 1)
-	if err == "" {
-		t.Errorf("Refute failed: 1 should not be 1")
-	}
-}
 
 func TestEvery(t *testing.T) {
 	i := 0
@@ -56,74 +24,36 @@ func TestEvery(t *testing.T) {
 	}
 }
 
+func TestEveryWhenDone(t *testing.T) {
+	i := 0
+	done := Every(20*time.Millisecond, func() {
+		i++
+	})
+	<-time.After(10 * time.Millisecond)
+	done <- true
+	<-time.After(50 * time.Millisecond)
+	if i > 1 {
+		t.Error("Test should have stopped after 20ms")
+	}
+}
+
 func TestAfter(t *testing.T) {
 	i := 0
 	After(1*time.Millisecond, func() {
 		i++
 	})
 	<-time.After(2 * time.Millisecond)
-	Assert(t, i, 1)
-}
-
-func TestPublish(t *testing.T) {
-	e := &Event{Chan: make(chan interface{}, 1)}
-	Publish(e, 1)
-	Publish(e, 2)
-	Publish(e, 3)
-	Publish(e, 4)
-	i := <-e.Chan
-	Assert(t, i, 1)
-
-	var e1 = (*Event)(nil)
-	Assert(t, Publish(e1, 4), ErrUnknownEvent)
-}
-
-func TestOn(t *testing.T) {
-	var i int
-	e := NewEvent()
-	On(e, func(data interface{}) {
-		i = data.(int)
-	})
-	Publish(e, 10)
-	<-time.After(1 * time.Millisecond)
-	Assert(t, i, 10)
-
-	var e1 = (*Event)(nil)
-	err := On(e1, func(data interface{}) {
-		i = data.(int)
-	})
-	Assert(t, err, ErrUnknownEvent)
-}
-func TestOnce(t *testing.T) {
-	i := 0
-	e := NewEvent()
-	Once(e, func(data interface{}) {
-		i += data.(int)
-	})
-	On(e, func(data interface{}) {
-		i += data.(int)
-	})
-	Publish(e, 10)
-	<-time.After(1 * time.Millisecond)
-	Publish(e, 10)
-	<-time.After(1 * time.Millisecond)
-	Assert(t, i, 30)
-
-	var e1 = (*Event)(nil)
-	err := Once(e1, func(data interface{}) {
-		i = data.(int)
-	})
-	Assert(t, err, ErrUnknownEvent)
+	gobottest.Assert(t, i, 1)
 }
 
 func TestFromScale(t *testing.T) {
-	Assert(t, FromScale(5, 0, 10), 0.5)
+	gobottest.Assert(t, FromScale(5, 0, 10), 0.5)
 }
 
 func TestToScale(t *testing.T) {
-	Assert(t, ToScale(500, 0, 10), 10.0)
-	Assert(t, ToScale(-1, 0, 10), 0.0)
-	Assert(t, ToScale(0.5, 0, 10), 5.0)
+	gobottest.Assert(t, ToScale(500, 0, 10), 10.0)
+	gobottest.Assert(t, ToScale(-1, 0, 10), 0.0)
+	gobottest.Assert(t, ToScale(0.5, 0, 10), 5.0)
 }
 
 func TestRand(t *testing.T) {

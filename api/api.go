@@ -154,6 +154,8 @@ func (a *API) robeaux(res http.ResponseWriter, req *http.Request) {
 		res.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	} else if t[len(t)-1] == "css" {
 		res.Header().Set("Content-Type", "text/css; charset=utf-8")
+	} else if t[len(t)-1] == "html" {
+		res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
 	res.Write(buf)
 }
@@ -235,10 +237,13 @@ func (a *API) robotDeviceEvent(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Cache-Control", "no-cache")
 	res.Header().Set("Connection", "keep-alive")
 
+	device := a.gobot.Robot(req.URL.Query().Get(":robot")).
+		Device(req.URL.Query().Get(":device"))
+
 	if event := a.gobot.Robot(req.URL.Query().Get(":robot")).
 		Device(req.URL.Query().Get(":device")).(gobot.Eventer).
-		Event(req.URL.Query().Get(":event")); event != nil {
-		gobot.On(event, func(data interface{}) {
+		Event(req.URL.Query().Get(":event")); len(event) > 0 {
+		device.(gobot.Eventer).On(event, func(data interface{}) {
 			d, _ := json.Marshal(data)
 			dataChan <- string(d)
 		})
@@ -295,7 +300,7 @@ func (a *API) robotConnection(res http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// executeMcpCommand calls a global command asociated to requested route
+// executeMcpCommand calls a global command associated to requested route
 func (a *API) executeMcpCommand(res http.ResponseWriter, req *http.Request) {
 	a.executeCommand(a.gobot.Command(req.URL.Query().Get(":command")),
 		res,
@@ -303,7 +308,7 @@ func (a *API) executeMcpCommand(res http.ResponseWriter, req *http.Request) {
 	)
 }
 
-// executeRobotDeviceCommand calls a device command asociated to requested route
+// executeRobotDeviceCommand calls a device command associated to requested route
 func (a *API) executeRobotDeviceCommand(res http.ResponseWriter, req *http.Request) {
 	if _, err := a.jsonDeviceFor(req.URL.Query().Get(":robot"),
 		req.URL.Query().Get(":device")); err != nil {
@@ -319,7 +324,7 @@ func (a *API) executeRobotDeviceCommand(res http.ResponseWriter, req *http.Reque
 	}
 }
 
-// executeRobotCommand calls a robot command asociated to requested route
+// executeRobotCommand calls a robot command associated to requested route
 func (a *API) executeRobotCommand(res http.ResponseWriter, req *http.Request) {
 	if _, err := a.jsonRobotFor(req.URL.Query().Get(":robot")); err != nil {
 		a.writeJSON(map[string]interface{}{"error": err.Error()}, res)

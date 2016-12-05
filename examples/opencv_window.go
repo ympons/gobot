@@ -1,9 +1,9 @@
 package main
 
 import (
-	cv "github.com/hybridgroup/go-opencv/opencv"
 	"github.com/hybridgroup/gobot"
 	"github.com/hybridgroup/gobot/platforms/opencv"
+	cv "github.com/lazywei/go-opencv/opencv"
 )
 
 func main() {
@@ -13,7 +13,7 @@ func main() {
 	camera := opencv.NewCameraDriver("camera", 0)
 
 	work := func() {
-		gobot.On(camera.Event("frame"), func(data interface{}) {
+		camera.On(camera.Event("frame"), func(data interface{}) {
 			window.ShowImage(data.(*cv.IplImage))
 		})
 	}

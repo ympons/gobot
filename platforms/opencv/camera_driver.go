@@ -5,16 +5,19 @@ import (
 
 	"time"
 
-	cv "github.com/hybridgroup/go-opencv/opencv"
 	"github.com/hybridgroup/gobot"
+	cv "github.com/lazywei/go-opencv/opencv"
 )
-
-var _ gobot.Driver = (*CameraDriver)(nil)
 
 type capture interface {
 	RetrieveFrame(int) *cv.IplImage
 	GrabFrame() bool
 }
+
+const (
+	// Frame event
+	Frame = "frame"
+)
 
 type CameraDriver struct {
 	name     string
@@ -50,7 +53,7 @@ func NewCameraDriver(name string, source interface{}, v ...time.Duration) *Camer
 		c.interval = v[0]
 	}
 
-	c.AddEvent("frame")
+	c.AddEvent(Frame)
 
 	return c
 }
@@ -69,7 +72,7 @@ func (c *CameraDriver) Start() (errs []error) {
 			if c.camera.GrabFrame() {
 				image := c.camera.RetrieveFrame(1)
 				if image != nil {
-					gobot.Publish(c.Event("frame"), image)
+					c.Publish(Frame, image)
 				}
 			}
 			<-time.After(c.interval)

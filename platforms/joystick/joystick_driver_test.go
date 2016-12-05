@@ -4,9 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hybridgroup/go-sdl2/sdl"
 	"github.com/hybridgroup/gobot"
+	"github.com/hybridgroup/gobot/gobottest"
+	"github.com/veandco/go-sdl2/sdl"
 )
+
+var _ gobot.Driver = (*JoystickDriver)(nil)
 
 func initTestJoystickDriver() *JoystickDriver {
 	a := NewJoystickAdaptor("bot")
@@ -25,7 +28,7 @@ func initTestJoystickDriver() *JoystickDriver {
 func TestJoystickDriverStart(t *testing.T) {
 	d := initTestJoystickDriver()
 	d.interval = 1 * time.Millisecond
-	gobot.Assert(t, len(d.Start()), 0)
+	gobottest.Assert(t, len(d.Start()), 0)
 	<-time.After(2 * time.Millisecond)
 }
 
@@ -34,60 +37,72 @@ func TestJoystickDriverHalt(t *testing.T) {
 	go func() {
 		<-d.halt
 	}()
-	gobot.Assert(t, len(d.Halt()), 0)
+	gobottest.Assert(t, len(d.Halt()), 0)
 }
 
 func TestJoystickDriverHandleEvent(t *testing.T) {
 	sem := make(chan bool)
 	d := initTestJoystickDriver()
 	d.Start()
+
+	// left x stick
+	d.On(d.Event("left_x"), func(data interface{}) {
+		gobottest.Assert(t, int16(100), data.(int16))
+		sem <- true
+	})
 	d.handleEvent(&sdl.JoyAxisEvent{
 		Which: 0,
 		Axis:  0,
 		Value: 100,
 	})
-	gobot.On(d.Event("left_x"), func(data interface{}) {
-		gobot.Assert(t, int16(100), data.(int16))
+	select {
+	case <-sem:
+	case <-time.After(10 * time.Second):
+		t.Errorf("Button Event \"left_x\" was not published")
+	}
+
+	// x button press
+	d.On(d.Event("x_press"), func(data interface{}) {
 		sem <- true
 	})
-	<-sem
 	d.handleEvent(&sdl.JoyButtonEvent{
 		Which:  0,
 		Button: 2,
 		State:  1,
 	})
-	gobot.On(d.Event("x_press"), func(data interface{}) {
-		sem <- true
-	})
 	select {
 	case <-sem:
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(10 * time.Second):
 		t.Errorf("Button Event \"x_press\" was not published")
 	}
+
+	// x button  release
+	d.On(d.Event("x_release"), func(data interface{}) {
+		sem <- true
+	})
 	d.handleEvent(&sdl.JoyButtonEvent{
 		Which:  0,
 		Button: 2,
 		State:  0,
 	})
-	gobot.On(d.Event("x_release"), func(data interface{}) {
-		sem <- true
-	})
 	select {
 	case <-sem:
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(10 * time.Second):
 		t.Errorf("Button Event \"x_release\" was not published")
 	}
+
+	// down button press
+	d.On(d.Event("down"), func(data interface{}) {
+		sem <- true
+	})
 	d.handleEvent(&sdl.JoyHatEvent{
 		Which: 0,
 		Hat:   0,
 		Value: 4,
 	})
-	gobot.On(d.Event("down"), func(data interface{}) {
-		sem <- true
-	})
 	select {
 	case <-sem:
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(10 * time.Second):
 		t.Errorf("Hat Event \"down\" was not published")
 	}
 
@@ -97,7 +112,7 @@ func TestJoystickDriverHandleEvent(t *testing.T) {
 		Value: 4,
 	})
 
-	gobot.Assert(t, err.Error(), "Unknown Hat: 99 4")
+	gobottest.Assert(t, err.Error(), "Unknown Hat: 99 4")
 
 	err = d.handleEvent(&sdl.JoyAxisEvent{
 		Which: 0,
@@ -105,7 +120,7 @@ func TestJoystickDriverHandleEvent(t *testing.T) {
 		Value: 100,
 	})
 
-	gobot.Assert(t, err.Error(), "Unknown Axis: 99")
+	gobottest.Assert(t, err.Error(), "Unknown Axis: 99")
 
 	err = d.handleEvent(&sdl.JoyButtonEvent{
 		Which:  0,
@@ -113,5 +128,5 @@ func TestJoystickDriverHandleEvent(t *testing.T) {
 		State:  0,
 	})
 
-	gobot.Assert(t, err.Error(), "Unknown Button: 99")
+	gobottest.Assert(t, err.Error(), "Unknown Button: 99")
 }

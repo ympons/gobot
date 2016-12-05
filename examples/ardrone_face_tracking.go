@@ -7,10 +7,10 @@ import (
 	"runtime"
 	"time"
 
-	cv "github.com/hybridgroup/go-opencv/opencv"
 	"github.com/hybridgroup/gobot"
 	"github.com/hybridgroup/gobot/platforms/ardrone"
 	"github.com/hybridgroup/gobot/platforms/opencv"
+	cv "github.com/lazywei/go-opencv/opencv"
 )
 
 func main() {
@@ -29,13 +29,13 @@ func main() {
 		detect := false
 		drone.TakeOff()
 		var image *cv.IplImage
-		gobot.On(camera.Event("frame"), func(data interface{}) {
+		camera.On(opencv.Frame, func(data interface{}) {
 			image = data.(*cv.IplImage)
-			if detect == false {
+			if !detect {
 				window.ShowImage(image)
 			}
 		})
-		gobot.On(drone.Event("flying"), func(data interface{}) {
+		drone.On(ardrone.Flying, func(data interface{}) {
 			gobot.After(1*time.Second, func() { drone.Up(0.2) })
 			gobot.After(2*time.Second, func() { drone.Hover() })
 			gobot.After(5*time.Second, func() {

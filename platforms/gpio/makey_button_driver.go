@@ -6,8 +6,6 @@ import (
 	"github.com/hybridgroup/gobot"
 )
 
-var _ gobot.Driver = (*MakeyButtonDriver)(nil)
-
 // MakeyButtonDriver Represents a Makey Button
 type MakeyButtonDriver struct {
 	name       string
@@ -22,7 +20,7 @@ type MakeyButtonDriver struct {
 // NewMakeyButtonDriver returns a new MakeyButtonDriver with a polling interval of
 // 10 Milliseconds given a DigitalReader, name and pin.
 //
-// Optinally accepts:
+// Optionally accepts:
 //  time.Duration: Interval at which the ButtonDriver is polled for new information
 func NewMakeyButtonDriver(a DigitalReader, name string, pin string, v ...time.Duration) *MakeyButtonDriver {
 	m := &MakeyButtonDriver{
@@ -40,8 +38,8 @@ func NewMakeyButtonDriver(a DigitalReader, name string, pin string, v ...time.Du
 	}
 
 	m.AddEvent(Error)
-	m.AddEvent(Push)
-	m.AddEvent(Release)
+	m.AddEvent(ButtonPush)
+	m.AddEvent(ButtonRelease)
 
 	return m
 }
@@ -67,15 +65,15 @@ func (b *MakeyButtonDriver) Start() (errs []error) {
 		for {
 			newValue, err := b.connection.DigitalRead(b.Pin())
 			if err != nil {
-				gobot.Publish(b.Event(Error), err)
+				b.Publish(Error, err)
 			} else if newValue != state && newValue != -1 {
 				state = newValue
 				if newValue == 0 {
 					b.Active = true
-					gobot.Publish(b.Event(Push), newValue)
+					b.Publish(ButtonPush, newValue)
 				} else {
 					b.Active = false
-					gobot.Publish(b.Event(Release), newValue)
+					b.Publish(ButtonRelease, newValue)
 				}
 			}
 			select {

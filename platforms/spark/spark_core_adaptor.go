@@ -11,21 +11,14 @@ import (
 
 	"github.com/donovanhide/eventsource"
 	"github.com/hybridgroup/gobot"
-	"github.com/hybridgroup/gobot/platforms/gpio"
 )
-
-var _ gobot.Adaptor = (*SparkCoreAdaptor)(nil)
-
-var _ gpio.DigitalReader = (*SparkCoreAdaptor)(nil)
-var _ gpio.DigitalWriter = (*SparkCoreAdaptor)(nil)
-var _ gpio.AnalogReader = (*SparkCoreAdaptor)(nil)
-var _ gpio.PwmWriter = (*SparkCoreAdaptor)(nil)
 
 type SparkCoreAdaptor struct {
 	name        string
 	DeviceID    string
 	AccessToken string
 	APIServer   string
+	gobot.Eventer
 }
 
 type Event struct {
@@ -50,11 +43,12 @@ func NewSparkCoreAdaptor(name string, deviceID string, accessToken string) *Spar
 		DeviceID:    deviceID,
 		AccessToken: accessToken,
 		APIServer:   "https://api.spark.io",
+		Eventer:     gobot.NewEventer(),
 	}
 }
 func (s *SparkCoreAdaptor) Name() string { return s.name }
 
-// Connect returns true if connection to spark core is succesfull
+// Connect returns true if connection to spark core is successfull
 func (s *SparkCoreAdaptor) Connect() (errs []error) {
 	return
 }
@@ -145,22 +139,18 @@ func (s *SparkCoreAdaptor) EventStream(source string, name string) (event *gobot
 		return
 	}
 
-	events, errors, err := eventSource(url)
+	events, _, err := eventSource(url)
 	if err != nil {
 		return
 	}
-
-	event = gobot.NewEvent()
 
 	go func() {
 		for {
 			select {
 			case ev := <-events:
 				if ev.Event() != "" && ev.Data() != "" {
-					gobot.Publish(event, Event{Name: ev.Event(), Data: ev.Data()})
+					s.Publish(ev.Event(), ev.Data())
 				}
-			case ev := <-errors:
-				gobot.Publish(event, Event{Error: ev})
 			}
 		}
 	}()
@@ -255,7 +245,7 @@ func (s *SparkCoreAdaptor) requestToSpark(method string, url string, params url.
 	json.Unmarshal(buf, &m)
 
 	if resp.Status != "200 OK" {
-		err = errors.New(fmt.Sprintf("&v: error communicating to the spark cloud", resp.Status))
+		err = fmt.Errorf("%v: error communicating to the spark cloud", resp.Status)
 	} else if _, ok := m["error"]; ok {
 		err = errors.New(m["error"].(string))
 	}

@@ -2,24 +2,12 @@ package edison
 
 import (
 	"errors"
-	"io"
 	"os"
 	"strconv"
 
 	"github.com/hybridgroup/gobot"
-	"github.com/hybridgroup/gobot/platforms/gpio"
-	"github.com/hybridgroup/gobot/platforms/i2c"
 	"github.com/hybridgroup/gobot/sysfs"
 )
-
-var _ gobot.Adaptor = (*EdisonAdaptor)(nil)
-
-var _ gpio.DigitalReader = (*EdisonAdaptor)(nil)
-var _ gpio.DigitalWriter = (*EdisonAdaptor)(nil)
-var _ gpio.AnalogReader = (*EdisonAdaptor)(nil)
-var _ gpio.PwmWriter = (*EdisonAdaptor)(nil)
-
-var _ i2c.I2c = (*EdisonAdaptor)(nil)
 
 func writeFile(path string, data []byte) (i int, err error) {
 	file, err := sysfs.OpenFile(path, os.O_WRONLY, 0644)
@@ -65,7 +53,7 @@ type EdisonAdaptor struct {
 	tristate    sysfs.DigitalPin
 	digitalPins map[int]sysfs.DigitalPin
 	pwmPins     map[int]*pwmPin
-	i2cDevice   io.ReadWriteCloser
+	i2cDevice   sysfs.I2cDevice
 	connect     func(e *EdisonAdaptor) (err error)
 }
 
@@ -194,6 +182,8 @@ func changePinMode(pin, mode string) (err error) {
 func NewEdisonAdaptor(name string) *EdisonAdaptor {
 	return &EdisonAdaptor{
 		name: name,
+		//i2cDevices: make(map[int]io.ReadWriteCloser),
+		//i2cDevices: make(map[int]io.ReadWriteCloser),
 		connect: func(e *EdisonAdaptor) (err error) {
 			e.tristate = sysfs.NewDigitalPin(214)
 			if err = e.tristate.Export(); err != nil {
@@ -439,11 +429,18 @@ func (e *EdisonAdaptor) AnalogRead(pin string) (val int, err error) {
 	if err != nil {
 		return
 	}
-	return strconv.Atoi(string(buf[0 : len(buf)-1]))
+
+	val, err = strconv.Atoi(string(buf[0 : len(buf)-1]))
+
+	return val / 4, err
 }
 
 // I2cStart initializes i2c device for addresss
-func (e *EdisonAdaptor) I2cStart(address byte) (err error) {
+func (e *EdisonAdaptor) I2cStart(address int) (err error) {
+	if e.i2cDevice != nil {
+		return
+	}
+
 	if err = e.tristate.Write(sysfs.LOW); err != nil {
 		return
 	}
@@ -492,14 +489,20 @@ func (e *EdisonAdaptor) I2cStart(address byte) (err error) {
 }
 
 // I2cWrite writes data to i2c device
-func (e *EdisonAdaptor) I2cWrite(data []byte) (err error) {
+func (e *EdisonAdaptor) I2cWrite(address int, data []byte) (err error) {
+	if err = e.i2cDevice.SetAddress(address); err != nil {
+		return err
+	}
 	_, err = e.i2cDevice.Write(data)
 	return
 }
 
 // I2cRead returns size bytes from the i2c device
-func (e *EdisonAdaptor) I2cRead(size uint) (data []byte, err error) {
+func (e *EdisonAdaptor) I2cRead(address int, size int) (data []byte, err error) {
 	data = make([]byte, size)
+	if err = e.i2cDevice.SetAddress(address); err != nil {
+		return
+	}
 	_, err = e.i2cDevice.Read(data)
 	return
 }

@@ -5,9 +5,9 @@ import (
 	"runtime"
 	"time"
 
-	cv "github.com/hybridgroup/go-opencv/opencv"
 	"github.com/hybridgroup/gobot"
 	"github.com/hybridgroup/gobot/platforms/opencv"
+	cv "github.com/lazywei/go-opencv/opencv"
 )
 
 func main() {
@@ -22,7 +22,7 @@ func main() {
 	work := func() {
 		var image *cv.IplImage
 
-		gobot.On(camera.Event("frame"), func(data interface{}) {
+		camera.On(opencv.Frame, func(data interface{}) {
 			image = data.(*cv.IplImage)
 		})
 

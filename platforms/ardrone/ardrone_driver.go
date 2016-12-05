@@ -4,7 +4,10 @@ import (
 	"github.com/hybridgroup/gobot"
 )
 
-var _ gobot.Driver = (*ArdroneDriver)(nil)
+const (
+	// Flying event
+	Flying = "flying"
+)
 
 // ArdroneDriver is gobot.Driver representation for the Ardrone
 type ArdroneDriver struct {
@@ -23,7 +26,7 @@ func NewArdroneDriver(connection *ArdroneAdaptor, name string) *ArdroneDriver {
 		connection: connection,
 		Eventer:    gobot.NewEventer(),
 	}
-	d.AddEvent("flying")
+	d.AddEvent(Flying)
 	return d
 }
 
@@ -50,7 +53,7 @@ func (a *ArdroneDriver) Halt() (errs []error) {
 
 // TakeOff makes the drone start flying, and publishes `flying` event
 func (a *ArdroneDriver) TakeOff() {
-	gobot.Publish(a.Event("flying"), a.adaptor().drone.Takeoff())
+	a.Publish(a.Event("flying"), a.adaptor().drone.Takeoff())
 }
 
 // Land causes the drone to land
@@ -90,7 +93,7 @@ func (a *ArdroneDriver) Forward(speed float64) {
 	a.adaptor().drone.Forward(speed)
 }
 
-// Backward causes the drone go forward, controls the pitch.
+// Backward causes the drone go backward, controls the pitch.
 // speed can be a value from `0.0` to `1.0`.
 func (a *ArdroneDriver) Backward(speed float64) {
 	a.adaptor().drone.Backward(speed)

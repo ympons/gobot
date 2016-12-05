@@ -6,8 +6,6 @@ import (
 	"github.com/hybridgroup/gobot"
 )
 
-var _ gobot.Driver = (*AnalogSensorDriver)(nil)
-
 // AnalogSensorDriver represents an Analog Sensor
 type AnalogSensorDriver struct {
 	name       string
@@ -22,7 +20,7 @@ type AnalogSensorDriver struct {
 // NewAnalogSensorDriver returns a new AnalogSensorDriver with a polling interval of
 // 10 Milliseconds given an AnalogReader, name and pin.
 //
-// Optinally accepts:
+// Optionally accepts:
 // 	time.Duration: Interval at which the AnalogSensor is polled for new information
 //
 // Adds the following API Commands:
@@ -63,10 +61,10 @@ func (a *AnalogSensorDriver) Start() (errs []error) {
 		for {
 			newValue, err := a.Read()
 			if err != nil {
-				gobot.Publish(a.Event(Error), err)
+				a.Publish(a.Event(Error), err)
 			} else if newValue != value && newValue != -1 {
 				value = newValue
-				gobot.Publish(a.Event(Data), value)
+				a.Publish(a.Event(Data), value)
 			}
 			select {
 			case <-time.After(a.interval):

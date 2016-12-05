@@ -5,7 +5,10 @@ import (
 	"time"
 
 	"github.com/hybridgroup/gobot"
+	"github.com/hybridgroup/gobot/gobottest"
 )
+
+var _ gobot.Driver = (*PebbleDriver)(nil)
 
 func initTestPebbleDriver() *PebbleDriver {
 	return NewPebbleDriver(NewPebbleAdaptor("adaptor"), "pebble")
@@ -13,30 +16,30 @@ func initTestPebbleDriver() *PebbleDriver {
 
 func TestPebbleDriverStart(t *testing.T) {
 	d := initTestPebbleDriver()
-	gobot.Assert(t, len(d.Start()), 0)
+	gobottest.Assert(t, len(d.Start()), 0)
 }
 
 func TestPebbleDriverHalt(t *testing.T) {
 	d := initTestPebbleDriver()
-	gobot.Assert(t, len(d.Halt()), 0)
+	gobottest.Assert(t, len(d.Halt()), 0)
 }
 
 func TestPebbleDriver(t *testing.T) {
 	d := initTestPebbleDriver()
 
-	gobot.Assert(t, d.Name(), "pebble")
-	gobot.Assert(t, d.Connection().Name(), "adaptor")
+	gobottest.Assert(t, d.Name(), "pebble")
+	gobottest.Assert(t, d.Connection().Name(), "adaptor")
 
 	sem := make(chan bool)
 	d.SendNotification("Hello")
 	d.SendNotification("World")
 
-	gobot.Assert(t, d.Messages[0], "Hello")
-	gobot.Assert(t, d.PendingMessage(), "Hello")
-	gobot.Assert(t, d.PendingMessage(), "World")
-	gobot.Assert(t, d.PendingMessage(), "")
+	gobottest.Assert(t, d.Messages[0], "Hello")
+	gobottest.Assert(t, d.PendingMessage(), "Hello")
+	gobottest.Assert(t, d.PendingMessage(), "World")
+	gobottest.Assert(t, d.PendingMessage(), "")
 
-	gobot.On(d.Event("button"), func(data interface{}) {
+	d.On(d.Event("button"), func(data interface{}) {
 		sem <- true
 	})
 
@@ -48,7 +51,7 @@ func TestPebbleDriver(t *testing.T) {
 		t.Errorf("Button Event was not published")
 	}
 
-	gobot.On(d.Event("accel"), func(data interface{}) {
+	d.On(d.Event("accel"), func(data interface{}) {
 		sem <- true
 	})
 
@@ -61,9 +64,9 @@ func TestPebbleDriver(t *testing.T) {
 	}
 
 	d.Command("send_notification")(map[string]interface{}{"message": "Hey buddy!"})
-	gobot.Assert(t, d.Messages[0], "Hey buddy!")
+	gobottest.Assert(t, d.Messages[0], "Hey buddy!")
 
 	message := d.Command("pending_message")(map[string]interface{}{})
-	gobot.Assert(t, message, "Hey buddy!")
+	gobottest.Assert(t, message, "Hey buddy!")
 
 }

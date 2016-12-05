@@ -3,11 +3,8 @@ package joystick
 import (
 	"errors"
 
-	"github.com/hybridgroup/go-sdl2/sdl"
-	"github.com/hybridgroup/gobot"
+	"github.com/veandco/go-sdl2/sdl"
 )
-
-var _ gobot.Adaptor = (*JoystickAdaptor)(nil)
 
 type joystick interface {
 	Close()

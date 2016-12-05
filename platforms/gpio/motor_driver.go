@@ -4,8 +4,6 @@ import (
 	"github.com/hybridgroup/gobot"
 )
 
-var _ gobot.Driver = (*MotorDriver)(nil)
-
 // MotorDriver Represents a Motor
 type MotorDriver struct {
 	name             string
@@ -175,10 +173,7 @@ func (m *MotorDriver) Direction(direction string) (err error) {
 }
 
 func (m *MotorDriver) isDigital() bool {
-	if m.CurrentMode == "digital" {
-		return true
-	}
-	return false
+	return m.CurrentMode == "digital"
 }
 
 func (m *MotorDriver) changeState(state byte) (err error) {

@@ -1,3 +1,88 @@
+0.12.0
+---
+* **Refactor Gobot test helpers into separate package**
+* **Improve Gobot.Every method to return channel, allowing it to be halted**
+* **Refactor of sysfs adds substantial speed improvements**
+* **ble**
+  * Experimental support for Bluetooth LE.
+  * Initial support for Battery & Device Information services
+  * Initial support for Sphero BLE robots such as Ollie
+  * Initial support for Parrot Minidrone
+* **audio**
+  * Add new platform for Audio playback
+* **gpio**
+  * Support added for new GPIO device:
+    * RGB LED
+  * Bugfixes:
+    * Correct analog to better handle quick changes
+    * Correct handling of errors and buffering for Wiichuk
+* **mqtt**
+  * Add support for MQTT authentication
+* **opencv**
+  * Switching to use main fork of OpenCV
+  * Some minor bugfixes related to face tracking
+
+0.11.0
+---
+* **Support for Golang 1.6**
+* **Determine I2C adaptor capabilities dynamically to avoid use of block I/O when unavailable**
+* **chip**
+  * Add support for GPIO & I2C interfaces on C.H.I.P. $9 computer
+* **leap motion**
+  * Add support additional "hand" and "gesture" events
+* **mqtt**
+  * Support latest update to Eclipse Paho MQTT client library
+* **raspberry pi**
+  * Proper release of Pi Blaster for PWM pins
+* **bebop**
+  * Prevent event race conditions on takeoff/landing
+* **i2c**
+  * Support added for new i2c device:
+    * MCP23017 Port Expander
+  * Bugfixes:
+    * Correct init and data parsing for MPU-6050
+    * Correct handling of errors and buffering for Wiichuk
+
+0.10.0
+---
+* **Refactor core to cleanup robot initialization and shutdown**
+* **Remove unnecessary goroutines spawned by NewEvent**
+* **api**
+  * Update Robeaux to v0.5.0
+* **bebop**
+  * Add support for the Parrot Bebop drone
+* **keyboard**
+  * Add support for keyboard control
+* **gpio**
+  * Support added for 10 new Grove GPIO devices:
+    * Grove Touch Sensor
+    * Grove Sound Sensor
+    * Grove Button
+    * Grove Buzzer
+    * Grove Led
+    * Grove Light Sensor
+    * Grove Vibration Sensor
+    * Grove Rotary
+    * Grove Relay
+    * Grove Temperature Sensor
+* **i2c**
+  * Support added for 2 new Grove i2c devices:
+    * Grove Accelerometer
+    * Grove LCD with RGB backlit display
+* **docs**
+  * Many useful fixes and updates for docs, mostly contributed by our wonderful community.
+
+0.8.2
+---
+  - firmata
+    - Refactor firmata adaptor and split firmata protocol implementation into sub `client` package
+  - gpio
+    - Add support for LIDAR-Lite
+  - raspi
+    - Add PWM support via pi-blaster
+  - sphero
+    - Add `ConfigureLocator`, `ReadLocator` and `SetRotationRate`  
+
 0.8.1
 ---
   - spark

@@ -34,8 +34,8 @@ func NewJSONRobot(robot *Robot) *JSONRobot {
 	return jsonRobot
 }
 
-// Robot is a named entitity that manages a collection of connections and devices.
-// It containes it's own work routine and a collection of
+// Robot is a named entity that manages a collection of connections and devices.
+// It contains its own work routine and a collection of
 // custom commands to control a robot remotely via the Gobot api.
 type Robot struct {
 	Name        string
@@ -58,6 +58,19 @@ func (r *Robots) Len() int {
 func (r *Robots) Start() (errs []error) {
 	for _, robot := range *r {
 		if errs = robot.Start(); len(errs) > 0 {
+			for i, err := range errs {
+				errs[i] = fmt.Errorf("Robot %q: %v", robot.Name, err)
+			}
+			return
+		}
+	}
+	return
+}
+
+// Stop calls the Stop method of each Robot in the collection
+func (r *Robots) Stop() (errs []error) {
+	for _, robot := range *r {
+		if errs = robot.Stop(); len(errs) > 0 {
 			for i, err := range errs {
 				errs[i] = fmt.Errorf("Robot %q: %v", robot.Name, err)
 			}
@@ -134,6 +147,14 @@ func (r *Robot) Start() (errs []error) {
 		r.Work()
 	}
 	return
+}
+
+// Stop stops a Robot's connections and Devices
+func (r *Robot) Stop() (errs []error) {
+	log.Println("Stopping Robot", r.Name, "...")
+	errs = append(errs, r.Devices().Halt()...)
+	errs = append(errs, r.Connections().Finalize()...)
+	return errs
 }
 
 // Devices returns all devices associated with this Robot.

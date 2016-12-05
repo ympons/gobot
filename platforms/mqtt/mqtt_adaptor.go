@@ -2,15 +2,14 @@ package mqtt
 
 import (
 	"git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git"
-	"github.com/hybridgroup/gobot"
 )
-
-var _ gobot.Adaptor = (*MqttAdaptor)(nil)
 
 type MqttAdaptor struct {
 	name     string
 	Host     string
 	clientID string
+	username string
+	password string
 	client   *mqtt.Client
 }
 
@@ -22,14 +21,26 @@ func NewMqttAdaptor(name string, host string, clientID string) *MqttAdaptor {
 		clientID: clientID,
 	}
 }
+
+func NewMqttAdaptorWithAuth(name, host, clientID, username, password string) *MqttAdaptor {
+	return &MqttAdaptor{
+		name:     name,
+		Host:     host,
+		clientID: clientID,
+		username: username,
+		password: password,
+	}
+}
+
 func (a *MqttAdaptor) Name() string { return a.name }
 
 // Connect returns true if connection to mqtt is established
 func (a *MqttAdaptor) Connect() (errs []error) {
-	a.client = mqtt.NewClient(createClientOptions(a.clientID, a.Host))
+	a.client = mqtt.NewClient(createClientOptions(a.clientID, a.Host, a.username, a.password))
 	if token := a.client.Connect(); token.Wait() && token.Error() != nil {
 		errs = append(errs, token.Error())
 	}
+
 	return
 }
 
@@ -41,7 +52,7 @@ func (a *MqttAdaptor) Disconnect() (err error) {
 	return
 }
 
-// Finalize returns true if connection to mqtt is finalized succesfully
+// Finalize returns true if connection to mqtt is finalized successfully
 func (a *MqttAdaptor) Finalize() (errs []error) {
 	a.Disconnect()
 	return
@@ -67,10 +78,14 @@ func (a *MqttAdaptor) On(event string, f func(s []byte)) bool {
 	return true
 }
 
-func createClientOptions(clientId, raw string) *mqtt.ClientOptions {
+func createClientOptions(clientId, raw, username, password string) *mqtt.ClientOptions {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(raw)
 	opts.SetClientID(clientId)
-
+	if username != "" && password != "" {
+		opts.SetPassword(password)
+		opts.SetUsername(username)
+	}
+	opts.AutoReconnect = false
 	return opts
 }

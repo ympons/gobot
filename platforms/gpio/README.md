@@ -6,7 +6,7 @@ This package provides drivers for [General Purpose Input/Output (GPIO)](https://
 
 ## Installing
 ```
-go get github.com/hybridgroup/gobot && go install github.com/hybridgroup/gobot/platforms/gpio
+go get -d -u github.com/hybridgroup/gobot/... && go install github.com/hybridgroup/gobot/platforms/gpio
 ```
 
 ## Hardware Support
@@ -14,10 +14,23 @@ Gobot has a extensible system for connecting to hardware devices. The following 
 
   - Analog Sensor
   - Button
+  - Buzzer
   - Direct Pin
+  - Grove Touch Sensor
+  - Grove Sound Sensor
+  - Grove Button
+  - Grove Buzzer
+  - Grove Light Sensor
+  - Grove Piezo Vibration Sensor
+  - Grove LED
+  - Grove Rotary Dial
+  - Grove Relay
+  - Grove Temperature Sensor
   - LED
   - Makey Button
   - Motor
+  - Relay
+  - RGB LED
   - Servo
 
 More drivers are coming soon...

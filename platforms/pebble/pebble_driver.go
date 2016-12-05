@@ -4,8 +4,6 @@ import (
 	"github.com/hybridgroup/gobot"
 )
 
-var _ gobot.Driver = (*PebbleDriver)(nil)
-
 type PebbleDriver struct {
 	name       string
 	connection gobot.Connection
@@ -58,12 +56,12 @@ func (d *PebbleDriver) Connection() gobot.Connection { return d.connection }
 // Start returns true if driver is initialized correctly
 func (d *PebbleDriver) Start() (errs []error) { return }
 
-// Halt returns true if driver is halted succesfully
+// Halt returns true if driver is halted successfully
 func (d *PebbleDriver) Halt() (errs []error) { return }
 
 // PublishEvent publishes event with specified name and data in gobot
 func (d *PebbleDriver) PublishEvent(name string, data string) {
-	gobot.Publish(d.Event(name), data)
+	d.Publish(d.Event(name), data)
 }
 
 // SendNotification appends message to list of notifications to be sent to watch
@@ -73,7 +71,7 @@ func (d *PebbleDriver) SendNotification(message string) string {
 }
 
 // PendingMessages returns messages to be sent as notifications to pebble
-// (Not intented to be used directly)
+// (Not intended to be used directly)
 func (d *PebbleDriver) PendingMessage() string {
 	if len(d.Messages) < 1 {
 		return ""

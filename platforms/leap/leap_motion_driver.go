@@ -8,7 +8,14 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-var _ gobot.Driver = (*LeapMotionDriver)(nil)
+const (
+	// Message event
+	MessageEvent = "message"
+	// Hand event
+	HandEvent = "hand"
+	// Gesture event
+	GestureEvent = "gesture"
+)
 
 type LeapMotionDriver struct {
 	name       string
@@ -24,6 +31,8 @@ var receive = func(ws io.ReadWriteCloser, msg *[]byte) {
 //
 // Adds the following events:
 //		"message" - Gets triggered when receiving a message from leap motion
+//		"hand" - Gets triggered per-message when leap motion detects a hand
+//		"gesture" - Gets triggered per-message when leap motion detects a hand
 func NewLeapMotionDriver(a *LeapMotionAdaptor, name string) *LeapMotionDriver {
 	l := &LeapMotionDriver{
 		name:       name,
@@ -31,7 +40,9 @@ func NewLeapMotionDriver(a *LeapMotionAdaptor, name string) *LeapMotionDriver {
 		Eventer:    gobot.NewEventer(),
 	}
 
-	l.AddEvent("message")
+	l.AddEvent(MessageEvent)
+	l.AddEvent(HandEvent)
+	l.AddEvent(GestureEvent)
 	return l
 }
 func (l *LeapMotionDriver) Name() string                 { return l.name }
@@ -47,6 +58,8 @@ func (l *LeapMotionDriver) adaptor() *LeapMotionAdaptor {
 //
 // Publishes the following events:
 //		"message" - Emits Frame on new message received from Leap.
+//		"hand" - Emits Hand when detected in message from Leap.
+//		"gesture" - Emits Gesture when detected in message from Leap.
 func (l *LeapMotionDriver) Start() (errs []error) {
 	enableGestures := map[string]bool{"enableGestures": true}
 	b, err := json.Marshal(enableGestures)
@@ -60,14 +73,24 @@ func (l *LeapMotionDriver) Start() (errs []error) {
 
 	go func() {
 		var msg []byte
+		var frame Frame
 		for {
 			receive(l.adaptor().ws, &msg)
-			gobot.Publish(l.Event("message"), l.ParseFrame(msg))
+			frame = l.ParseFrame(msg)
+			l.Publish(MessageEvent, frame)
+
+			for _, hand := range frame.Hands {
+				l.Publish(HandEvent, hand)
+			}
+
+			for _, gesture := range frame.Gestures {
+				l.Publish(GestureEvent, gesture)
+			}
 		}
 	}()
 
 	return
 }
 
-// Halt returns true if driver is halted succesfully
+// Halt returns true if driver is halted successfully
 func (l *LeapMotionDriver) Halt() (errs []error) { return }
